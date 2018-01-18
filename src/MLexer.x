@@ -1,3 +1,4 @@
+--
 -- Copyright (C) 2016 Leonardo Banderali
 --
 -- License:
@@ -19,6 +20,7 @@
 --     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 --     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 --     THE SOFTWARE.
+--
 
 {
 module MLexer where
@@ -33,6 +35,9 @@ $alpha = [a-zA-Z]   -- alphabetic characters
 
 @identirier = $alpha[$digit $alpha]*
 
+-- multi-line comment handling largely inspired by:
+-- https://github.com/simonmar/alex/blob/master/examples/tiger.x
+
 tokens :-
             $white+     ;
             "%".*       ;
@@ -40,7 +45,6 @@ tokens :-
 <comment>   "/*"        { embedComment }
 <comment>   "*/"        { unembedComment }
 <comment>   .           ;
-<comment>   \n          { skip }
 <0>         "*/"        { \_ _ -> alexError "Illegal */" }
 <0>         "if"        { \(pos, prevc, rest, str) len -> return IF }
 <0>         "then"      { \(pos, prevc, rest, str) len -> return THEN }
@@ -69,23 +73,27 @@ data AlexUserState = AlexUserState { commentDepth :: Int }
 alexInitUserState :: AlexUserState
 alexInitUserState = AlexUserState { commentDepth  = 0 }
 
+startComment :: AlexInput -> Int -> Alex Token
 startComment input len =
-    do setLexerCommentDepth 1
+    do setCommentDepth 1
        skip input len
 
-getLexerCommentDepth :: Alex Int
-getLexerCommentDepth = Alex $ \s@AlexState{alex_ust=ust} -> Right (s, commentDepth ust)
+getCommentDepth :: Alex Int
+getCommentDepth = Alex $ \s@AlexState{alex_ust=ust} -> Right (s, commentDepth ust)
 
-setLexerCommentDepth :: Int -> Alex ()
-setLexerCommentDepth ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){commentDepth=ss}}, ())
+setCommentDepth :: Int -> Alex ()
+setCommentDepth ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){commentDepth=ss}}, ())
 
+embedComment :: AlexInput -> Int -> Alex Token
 embedComment input len =
-    do cd <- getLexerCommentDepth
-       setLexerCommentDepth (cd + 1)
+    do cd <- getCommentDepth
+       setCommentDepth (cd + 1)
        skip input len
+
+unembedComment :: AlexInput -> Int -> Alex Token
 unembedComment input len =
-    do cd <- getLexerCommentDepth
-       setLexerCommentDepth (cd - 1)
+    do cd <- getCommentDepth
+       setCommentDepth (cd - 1)
        when (cd == 1) (alexSetStartCode 0)
        skip input len
 
@@ -113,14 +121,19 @@ data Token  = IF
             | SEMICOLON
             | EOF deriving (Eq, Show)
 
+getNextToken :: Alex Token
+getNextToken = do
+    tok <- alexMonadScan
+    if tok == EOF then do
+        commentDepth <- getCommentDepth
+        if commentDepth == 0 then return tok else alexError "Missing */"
+    else return tok
+
 scan :: String -> Either String [Token]
 scan str = runAlex str $ do
     let loop l = do
-            tok <- alexMonadScan;
-            if tok == EOF then do
-                    commentDepth <- getLexerCommentDepth
-                    if commentDepth == 0 then return l else alexError "Missing */"
-            else do loop $! (l ++ [tok])
+            tok <- getNextToken
+            if tok == EOF then return l else do loop $! (l ++ [tok])
     loop []
 
 }
