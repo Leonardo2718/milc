@@ -70,34 +70,43 @@ tokens :-
 
 {
 
-data CommentState = NoComment | Comment { commentDepth:: Int, commentStartPos :: [AlexPosn] }
-data AlexUserState = AlexUserState  { commentState :: CommentState }
+type AlexPosnStack = [AlexPosn]
+data AlexUserState = AlexUserState  { activeCommentStarts :: AlexPosnStack }
 
 alexInitUserState :: AlexUserState
-alexInitUserState = AlexUserState   { commentState = NoComment }
+alexInitUserState = AlexUserState   { activeCommentStarts = mempty }
 
-getCommentState :: Alex CommentState
-getCommentState = Alex $ \s@AlexState{alex_ust=ust} -> Right (s, commentState ust)
+getActiveCommentStarts :: Alex [AlexPosn]
+getActiveCommentStarts = Alex $ \s@AlexState{alex_ust=ust} -> Right (s, activeCommentStarts ust)
 
-setCommentState :: CommentState -> Alex ()
-setCommentState ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){commentState=ss}}, ())
+setActiveCommentStarts :: [AlexPosn] -> Alex ()
+setActiveCommentStarts ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){activeCommentStarts=ss}}, ())
+
+pushActiveCommentStart :: AlexPosn -> Alex ()
+pushActiveCommentStart p = do
+    ps <- getActiveCommentStarts
+    setActiveCommentStarts (p:ps)
+
+popActiveCommentStart :: Alex (AlexPosn, [AlexPosn])
+popActiveCommentStart = do
+    (p:ps) <- getActiveCommentStarts
+    setActiveCommentStarts ps
+    return (p, ps)
 
 startComment :: AlexInput -> Int -> Alex Token
 startComment input@(pos,_,_,_) len = do
-    setCommentState (Comment 1 [pos])
+    pushActiveCommentStart pos
     skip input len
 
 embedComment :: AlexInput -> Int -> Alex Token
-embedComment input@(pos,_,_,_) len =
-    do Comment depth ps <- getCommentState
-       setCommentState (Comment (depth + 1) (pos:ps))
-       skip input len
+embedComment input@(pos,_,_,_) len = do
+    pushActiveCommentStart pos
+    skip input len
 
 unembedComment :: AlexInput -> Int -> Alex Token
 unembedComment input len = do
-    Comment depth (p:ps) <- getCommentState
-    setCommentState $ if depth == 1 then NoComment else Comment (depth - 1) ps
-    when (depth == 1) (alexSetStartCode 0)
+    (p, ps) <- popActiveCommentStart
+    when (length ps == 0) (alexSetStartCode 0)
     skip input len
 
 showAlexPos :: AlexPosn -> String
@@ -138,10 +147,10 @@ scanToken :: Alex Token
 scanToken = do
     tok <- alexMonadScan
     if tok == EOF then do
-        commentState <- getCommentState
-        case commentState of
-            NoComment     -> return tok
-            Comment d pos -> alexError . concat $ [ "Missing ", show d, " */, openning /* at:\n\t"
+        activeComments <- getActiveCommentStarts
+        case activeComments of
+            []  -> return tok
+            pos -> alexError . concat $ [ "Missing ", show (length pos), " */, openning /* at:\n\t"
                                                   , intercalate "\n\t" $ map showAlexPos pos]
     else return tok
 
