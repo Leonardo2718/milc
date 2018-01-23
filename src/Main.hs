@@ -1,6 +1,6 @@
 {-
 
-Copyright (C) 2016 Leonardo Banderali
+Copyright (C) 2018 Leonardo Banderali
 
 License:
 
@@ -26,9 +26,75 @@ License:
 
 module Main where
 
+-- system imports
+import System.Environment (getArgs)
+import System.Console.GetOpt
+import System.IO
+
+-- local imports
 import MLexer
+
+-- option processing -----------------------------------------------------------
+
+data Options = Options
+    { optInFiles        :: [String] -- list of source files to compile
+    , optStdIn          :: Bool     -- read source from std input
+    , optOutFile        :: String   -- path to output file
+    , optHelp           :: Bool     -- display usage information
+    }
+
+defaultOptions :: Options
+defaultOptions = Options
+    { optInFiles = []
+    , optStdIn = False
+    , optOutFile = ""
+    , optHelp = False
+    }
+
+optionTransforms :: [OptDescr (Options -> Options)]
+optionTransforms =
+    [ Option    [] ["stdin"]
+                (NoArg (\ opts -> opts {optStdIn = True}) )
+                "read source from standard input"
+    , Option    ['o'] ["output"]
+                (ReqArg (\ s opts -> opts {optOutFile = s}) "FILE")
+                "write output to specified file (defaults to standard output if not specified)"
+    , Option    ['h'] ["help"]
+                (NoArg (\ opts -> opts {optHelp = True}) )
+                "display this help message"
+    ]
+
+applyOptionTransforms :: [OptDescr (Options -> Options)] -> [String] -> Options -> Options
+applyOptionTransforms transforms argv defaults =
+    case getOpt' Permute transforms argv of
+        (o, p, [], [])  -> (foldl (flip id) defaults o) {optInFiles = p}
+        (_, _, n, [])   -> error (concatMap (\ a -> "Unknown argument: " ++ a ++ "\n") n ++ helpMessage)
+        (_,_,_,errors)  -> error (concat errors ++ helpMessage)
+
+helpMessage :: String
+helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
+                        \  Will compile the source Minisculus files. If no source files are provided,\n\
+                        \  contents of standard input will be compiled, upto EOF (Ctrl+D).\n\n\
+                        \Options:" optionTransforms
+
+-- main program ----------------------------------------------------------------
+
+compile :: String -> IO ()
+compile = genOutput . scan where
+    genOutput (Right ts) = print ts
+    genOutput (Left s) = putStrLn "COMPILATION ERROR:" >> putStrLn s
+
+compileFile :: String -> IO ()
+compileFile f = readFile f >>= compile
+
+runCompiler :: Options -> IO ()
+runCompiler options
+    | optHelp options           = putStrLn helpMessage      -- print help message if options '-h' or '--help' where passed
+    | optInFiles options == []  = getContents >>= compile   -- compile standard input if no source files were provided
+    | otherwise                 = mconcat (map compileFile $ optInFiles options)  -- compile all source files
 
 main :: IO ()
 main = do
-    s <- getContents
-    print (scan s)
+    args <- getArgs
+    let options = applyOptionTransforms optionTransforms args defaultOptions
+    runCompiler options
