@@ -121,8 +121,8 @@ data Token  = IF
             | SEMICOLON
             | EOF deriving (Eq, Show)
 
-getNextToken :: Alex Token
-getNextToken = do
+scanToken :: Alex Token
+scanToken = do
     tok <- alexMonadScan
     if tok == EOF then do
         commentDepth <- getCommentDepth
@@ -132,7 +132,7 @@ getNextToken = do
 scan :: String -> Either String [Token]
 scan str = runAlex str $ do
     let loop l = do
-            tok <- getNextToken
+            tok <- scanToken
             if tok == EOF then return l else do loop $! (l ++ [tok])
     loop []
 
