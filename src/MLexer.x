@@ -1,5 +1,5 @@
 --
--- Copyright (C) 2016 Leonardo Banderali
+-- Copyright (C) 2018 Leonardo Banderali
 --
 -- License:
 --
@@ -45,60 +45,73 @@ tokens :-
 <comment>   "/*"        { embedComment }
 <comment>   "*/"        { unembedComment }
 <comment>   .           ;
-<0>         "*/"        { \_ _ -> alexError "Illegal */" }
-<0>         "if"        { \(pos, prevc, rest, str) len -> return IF }
-<0>         "then"      { \(pos, prevc, rest, str) len -> return THEN }
-<0>         "else"      { \(pos, prevc, rest, str) len -> return ELSE }
-<0>         "while"     { \(pos, prevc, rest, str) len -> return WHILE }
-<0>         "do"        { \(pos, prevc, rest, str) len -> return DO }
-<0>         "begin"     { \(pos, prevc, rest, str) len -> return BEGIN }
-<0>         "end"       { \(pos, prevc, rest, str) len -> return END }
-<0>         "input"     { \(pos, prevc, rest, str) len -> return INPUT }
-<0>         "write"     { \(pos, prevc, rest, str) len -> return WRITE }
-<0>         @identirier { \(pos, prevc, rest, str) len -> return $ ID $ take len str }
-<0>         $digit+     { \(pos, prevc, rest, str) len -> return $ NUM (read (take len str) :: Int) }
-<0>         ":="        { \(pos, prevc, rest, str) len -> return ASSIGN }
-<0>         "+"         { \(pos, prevc, rest, str) len -> return ADD }
-<0>         "-"         { \(pos, prevc, rest, str) len -> return SUB }
-<0>         "*"         { \(pos, prevc, rest, str) len -> return MUL }
-<0>         "/"         { \(pos, prevc, rest, str) len -> return DIV }
-<0>         "("         { \(pos, prevc, rest, str) len -> return LPAR }
-<0>         ")"         { \(pos, prevc, rest, str) len -> return RPAR }
-<0>         ";"         { \(pos, prevc, rest, str) len -> return SEMICOLON }
+<0>         "*/"        { lexerError (\_ -> "Unexpected */") }
+<0>         "if"        { emitToken (\_ -> IF) }
+<0>         "then"      { emitToken (\_ -> THEN) }
+<0>         "else"      { emitToken (\_ -> ELSE) }
+<0>         "while"     { emitToken (\_ -> WHILE) }
+<0>         "do"        { emitToken (\_ -> DO) }
+<0>         "begin"     { emitToken (\_ -> BEGIN) }
+<0>         "end"       { emitToken (\_ -> END) }
+<0>         "input"     { emitToken (\_ -> INPUT) }
+<0>         "write"     { emitToken (\_ -> WRITE) }
+<0>         @identirier { emitToken (\s -> ID s) }
+<0>         $digit+     { emitToken (\s -> NUM (read s)) }
+<0>         ":="        { emitToken (\_ -> ASSIGN) }
+<0>         "+"         { emitToken (\_ -> ADD) }
+<0>         "-"         { emitToken (\_ -> SUB) }
+<0>         "*"         { emitToken (\_ -> MUL) }
+<0>         "/"         { emitToken (\_ -> DIV) }
+<0>         "("         { emitToken (\_ -> LPAR) }
+<0>         ")"         { emitToken (\_ -> RPAR) }
+<0>         ";"         { emitToken (\_ -> SEMICOLON) }
+            .           { lexerError  (\s -> "Unrecognized character " ++ s) }
 
 {
 
-data AlexUserState = AlexUserState { commentDepth :: Int }
+data CommentState = NoComment | Comment { commentDepth:: Int, commentStartPos :: AlexPosn }
+data AlexUserState = AlexUserState  { commentState :: CommentState }
 
 alexInitUserState :: AlexUserState
-alexInitUserState = AlexUserState { commentDepth  = 0 }
+alexInitUserState = AlexUserState   { commentState = NoComment }
+
+getCommentState :: Alex CommentState
+getCommentState = Alex $ \s@AlexState{alex_ust=ust} -> Right (s, commentState ust)
+
+setCommentState :: CommentState -> Alex ()
+setCommentState ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){commentState=ss}}, ())
 
 startComment :: AlexInput -> Int -> Alex Token
 startComment input len =
-    do setCommentDepth 1
+    let (pos, _, _, _) = input in
+    do setCommentState (Comment 1 pos)
        skip input len
-
-getCommentDepth :: Alex Int
-getCommentDepth = Alex $ \s@AlexState{alex_ust=ust} -> Right (s, commentDepth ust)
-
-setCommentDepth :: Int -> Alex ()
-setCommentDepth ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){commentDepth=ss}}, ())
 
 embedComment :: AlexInput -> Int -> Alex Token
 embedComment input len =
-    do cd <- getCommentDepth
-       setCommentDepth (cd + 1)
+    do Comment depth p <- getCommentState
+       setCommentState (Comment (depth + 1) p)
        skip input len
 
 unembedComment :: AlexInput -> Int -> Alex Token
 unembedComment input len =
-    do cd <- getCommentDepth
-       setCommentDepth (cd - 1)
-       when (cd == 1) (alexSetStartCode 0)
+    do Comment depth p <- getCommentState
+       setCommentState (if depth == 1 then NoComment else Comment (depth - 1) p )
+       when (depth == 1) (alexSetStartCode 0)
        skip input len
+
+showAlexPos :: AlexPosn -> String
+showAlexPos (AlexPn _ l c) = concat ["line ", show l, " column ", show c]
+
+lexerError :: (String -> String) -> AlexInput -> Int -> Alex Token
+lexerError mkmsg ((AlexPn _ l c),_,_,str) len = alexError (lexerMsg ++ mkmsg (take len str)) where
+    lexerMsg = concat ["Lexical error at line ", show l, ", column ", show c, ": "]
 
 alexEOF :: Alex Token
 alexEOF = return EOF
+
+emitToken :: (String -> Token) -> AlexInput -> Int -> Alex Token
+emitToken emiter (pos, prevc, rest, str) len = return (emiter (take len str))
 
 data Token  = IF
             | THEN
@@ -125,8 +138,10 @@ scanToken :: Alex Token
 scanToken = do
     tok <- alexMonadScan
     if tok == EOF then do
-        commentDepth <- getCommentDepth
-        if commentDepth == 0 then return tok else alexError "Missing */"
+        commentState <- getCommentState
+        case commentState of
+            NoComment     -> return tok
+            Comment d pos -> alexError . concat $ ["Missing ", show d, " */, first openning /* at ", showAlexPos pos]
     else return tok
 
 scan :: String -> Either String [Token]
