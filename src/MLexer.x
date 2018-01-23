@@ -26,11 +26,12 @@
 module MLexer where
 
 import Control.Monad
+import Data.List
 }
 
 %wrapper "monadUserState"
 
-$digit = 0-9      -- digits
+$digit = 0-9        -- digits
 $alpha = [a-zA-Z]   -- alphabetic characters
 
 @identirier = $alpha[$digit $alpha]*
@@ -65,11 +66,11 @@ tokens :-
 <0>         "("         { emitToken (\_ -> LPAR) }
 <0>         ")"         { emitToken (\_ -> RPAR) }
 <0>         ";"         { emitToken (\_ -> SEMICOLON) }
-            .           { lexerError  (\s -> "Unrecognized character " ++ s) }
+            .           { lexerError (\s -> "Unrecognized character " ++ s) }
 
 {
 
-data CommentState = NoComment | Comment { commentDepth:: Int, commentStartPos :: AlexPosn }
+data CommentState = NoComment | Comment { commentDepth:: Int, commentStartPos :: [AlexPosn] }
 data AlexUserState = AlexUserState  { commentState :: CommentState }
 
 alexInitUserState :: AlexUserState
@@ -82,23 +83,22 @@ setCommentState :: CommentState -> Alex ()
 setCommentState ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){commentState=ss}}, ())
 
 startComment :: AlexInput -> Int -> Alex Token
-startComment input len =
-    let (pos, _, _, _) = input in
-    do setCommentState (Comment 1 pos)
-       skip input len
+startComment input@(pos,_,_,_) len = do
+    setCommentState (Comment 1 [pos])
+    skip input len
 
 embedComment :: AlexInput -> Int -> Alex Token
-embedComment input len =
-    do Comment depth p <- getCommentState
-       setCommentState (Comment (depth + 1) p)
+embedComment input@(pos,_,_,_) len =
+    do Comment depth ps <- getCommentState
+       setCommentState (Comment (depth + 1) (pos:ps))
        skip input len
 
 unembedComment :: AlexInput -> Int -> Alex Token
-unembedComment input len =
-    do Comment depth p <- getCommentState
-       setCommentState (if depth == 1 then NoComment else Comment (depth - 1) p )
-       when (depth == 1) (alexSetStartCode 0)
-       skip input len
+unembedComment input len = do
+    Comment depth (p:ps) <- getCommentState
+    setCommentState $ if depth == 1 then NoComment else Comment (depth - 1) ps
+    when (depth == 1) (alexSetStartCode 0)
+    skip input len
 
 showAlexPos :: AlexPosn -> String
 showAlexPos (AlexPn _ l c) = concat ["line ", show l, " column ", show c]
@@ -141,7 +141,8 @@ scanToken = do
         commentState <- getCommentState
         case commentState of
             NoComment     -> return tok
-            Comment d pos -> alexError . concat $ ["Missing ", show d, " */, first openning /* at ", showAlexPos pos]
+            Comment d pos -> alexError . concat $ [ "Missing ", show d, " */, openning /* at:\n\t"
+                                                  , intercalate "\n\t" $ map showAlexPos pos]
     else return tok
 
 scan :: String -> Either String [Token]
