@@ -59,9 +59,9 @@ optionTransforms =
     [ Option    [] ["stdin"]
                 (NoArg (\ opts -> opts {optStdIn = True}) )
                 "read source from standard input"
-    , Option    ['o'] ["output"]
-                (ReqArg (\ s opts -> opts {optOutFile = s}) "FILE")
-                "write output to specified file (defaults to standard output if not specified)"
+    -- , Option    ['o'] ["output"]
+    --             (ReqArg (\ s opts -> opts {optOutFile = s}) "FILE")
+    --             "write output to specified file (defaults to standard output if not specified)"
     , Option    ['h'] ["help"]
                 (NoArg (\ opts -> opts {optHelp = True}) )
                 "display this help message"
@@ -98,6 +98,7 @@ compileFile f = readFile f >>= compile
 runCompiler :: Options -> IO ()
 runCompiler options
     | optHelp options           = putStrLn helpMessage      -- print help message if options '-h' or '--help' where passed
+    | optStdIn options          = getContents >>= compile   -- force compilation of standard input
     | optInFiles options == []  = getContents >>= compile   -- compile standard input if no source files were provided
     | otherwise                 = mconcat (map compileFile $ optInFiles options)  -- compile all source files
 
