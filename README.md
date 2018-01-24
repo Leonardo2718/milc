@@ -1,6 +1,18 @@
 # mcomp - The Minisculus Compiler
 
-In its current state, the compiler only runs lexical analyzer.
+In its current state, the compiler only does lexical analysis and prints the
+identified tokens to standard output.
+
+## Feature overview
+
+Some note-worthy features include:
+
+- can read source from multiple files or standard input
+- recognizes nested multi-line comments
+- reports missing `*/` foo each level of un-closed nested comment
+- gives single-line comments higher precedence than multi-line comments
+- reports line and column number of errors
+- reports file containing the reported error (if not reading from standard input)
 
 ## Building
 

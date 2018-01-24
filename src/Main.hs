@@ -30,6 +30,7 @@ module Main where
 import System.Environment (getArgs)
 import System.Console.GetOpt
 import System.IO
+import Data.List
 
 -- local imports
 import MLexer
@@ -84,22 +85,40 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 
 -- main program ----------------------------------------------------------------
 
--- run the different stages of the compiler
-compile :: String -> IO ()
-compile = genOutput . scan where
+-- data type representing the compiler state
+data CompilerState = CS
+    { csSource      :: String   -- the actual source code being compiled
+    , csSourceFile  :: String   -- path to the file containing the source code (empty if using stdin)
+    }
+
+-- run the different stages of the compiler (currently only lexer)
+compile :: CompilerState -> IO ()
+compile cs = genOutput . scan . csSource $ cs where
     genOutput (Right ts) = print ts
-    genOutput (Left s) = putStrLn "COMPILATION ERROR:" >> putStrLn s
+    genOutput (Left s) = putStrLn msg >> putStrLn s where
+        msg = concat ["\nCOMPILATION ERROR", location, ":"]
+        location = case csSourceFile cs of
+            "" -> ""
+            f  -> " in " ++ f
 
 -- compile a file (argument is path to the file)
 compileFile :: String -> IO ()
-compileFile f = readFile f >>= compile
+compileFile f = do
+    s <- readFile f
+    compile CS {csSource = s, csSourceFile = f}
+
+-- compile source from standard input
+compileStdIn :: IO ()
+compileStdIn = do
+    s <- getContents
+    compile CS {csSource = s, csSourceFile = ""}
 
 -- invoke function based on parsed command line options
 runCompiler :: Options -> IO ()
 runCompiler options
-    | optHelp options           = putStrLn helpMessage      -- print help message if options '-h' or '--help' where passed
-    | optStdIn options          = getContents >>= compile   -- force compilation of standard input
-    | optInFiles options == []  = getContents >>= compile   -- compile standard input if no source files were provided
+    | optHelp options           = putStrLn helpMessage  -- print help message if options '-h' or '--help' where passed
+    | optStdIn options          = compileStdIn          -- force compilation of standard input
+    | optInFiles options == []  = compileStdIn          -- compile standard input if no source files were provided
     | otherwise                 = mconcat (map compileFile $ optInFiles options)  -- compile all source files
 
 main :: IO ()
