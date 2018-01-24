@@ -1,0 +1,46 @@
+/*
+ * This program tries to guess the number the user is thinking of (betwee 1 and 100)
+ *
+ * The program start by printing its guess. If the guess is too high then the user
+ * must enter 1. If the guess is too low then the user must enter -1. If the guess
+ * is correct, then the user must enter 0. Once the number is guess correctly,
+ * it is printed and the program terminates.
+ */
+
+guess := 50;
+interval := 25;
+notCorrect := 1;
+
+while notCorrect do
+    begin
+        write guess;
+        input i;
+
+        if i then
+            % if i != 0 then it must be either -1 or 1
+            begin
+                if i - 1 then
+                    % if i - 1 != 0 then i should be -1
+                    begin
+                        if (i + 1) then
+                            % if i + 1 != 0 then i is not -1, 0, or 1, so we error out
+                            begin
+                                guess := -1;
+                                notCorrect := 0;
+                            end
+                        else % if i + 1 == 0 then i = -1 and our guess is too low
+                            begin
+                                guess := (guess - interval);
+                                interval := interval / 2;
+                            end
+                    end
+                else % if i - 1 == 0 then i = 1 and our guess is too high
+                    begin
+                        guess := guess + interval;
+                        interval := interval / 2;
+                    end
+            end
+        else notCorrect := 0;  % if i == 0 then we found the number !
+    end
+
+write guess;

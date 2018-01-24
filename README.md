@@ -58,6 +58,15 @@ $ ./make_build/mcomp --help
 $ ./make_build/mcomp test/from_assignment/test3.m_
 ```
 
+## Tests
+
+The `tests/` directory contains some sample tests for the compiler. Tests are
+further divided into three sub-directories:
+
+- `test/from_assignment`: contains test files provided as part of the assignment
+- `test/good`: contains "well-formed" test files that should compile successfully
+- `test/bad`: contains test files that should cause compilation failures
+
 ## License
 
 The source code for mcomp and all accompanying scripts and documentation are

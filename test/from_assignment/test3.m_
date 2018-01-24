@@ -1,0 +1,29 @@
+/* 
+     Author: Robin Cockett
+     Purpose: Basic test 1 for the M- scanner
+     Date: 21 Jan 2007
+ 
+     Basic multi-line comments should work!
+*/
+
+x:= a+b*c
+
+/*
+     Here is another comment
+ */
+
+begin
+  x:=1;
+  y:=2;
+  z:=3;
+end
+
+/* yet more comments
+
+   v:= w-3;
+
+ */
+
+print x;
+
+% write y;

@@ -1,0 +1,62 @@
+/*
+This line is commented out
+*/
+
+/*
+% This line is even more commented out
+*/
+
+/*
+/*
+This is a nested multi-line comment
+*/
+*/
+
+/*/*allOneLineAndNoSpaces*/*/
+
+/*
+% /* this open comment should be ignored
+*/
+
+/*
+% This should not close the comment */
+*/
+
+/* Now, let's try some actual code
+begin
+    input x;                    % input a number ..
+    y := 1;
+    while x do
+        begin
+            y :=  y * x;
+            x :=  x - 1;
+         end;
+    write y;
+end
+*/
+
+/* Lots of nesting here
+/*
+foo
+*/
+/*    bar */
+quux
+
+/*
+% bazz
+*/
+
+% /* blip */
+
+*/
+
+/*
+
+% /* % */
+
+*/
+
+/******************************/
+
+/***************
+****************/

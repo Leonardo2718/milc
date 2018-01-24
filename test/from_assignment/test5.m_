@@ -1,0 +1,34 @@
+/* 
+     Author: Robin Cockett
+     Purpose: Basic test 1 for the M- scanner
+     Date: 21 Jan 2007
+ 
+     Basic /* multi-line comments */ with % single line comments should work!
+     Single line comments take precence over multi-line 
+     comments
+*/
+
+x:= a+b*c
+
+/*
+     Here is another comment
+ */
+
+begin
+  x:=1;  % set x to 1!
+  y:=2;   /*
+  z:=3;  
+         % the really tricky thing is that 
+         % if I close a multiline comment, thus */ in a 
+         % line comment it does not count!
+end
+
+/* yet more comments
+
+   v:= w-3;
+
+ */
+
+print x;  */
+
+% write y;
