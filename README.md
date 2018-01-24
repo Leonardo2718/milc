@@ -57,3 +57,8 @@ commands is:
 $ ./make_build/mcomp --help
 $ ./make_build/mcomp test/from_assignment/test3.m_
 ```
+
+## License
+
+The source code for mcomp and all accompanying scripts and documentation are
+distributed under the terms of [the MIT License](https://opensource.org/licenses/MIT).
