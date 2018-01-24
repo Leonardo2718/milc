@@ -70,16 +70,21 @@ tokens :-
 
 {
 
+-- user state data type (for use with `monadUserState` wrapper)
 type AlexPosnStack = [AlexPosn]
-data AlexUserState = AlexUserState  { activeCommentStarts :: AlexPosnStack }
+data AlexUserState = AlexUserState
+    { activeCommentStarts :: AlexPosnStack  -- stores the position of currently active (un-closed) "/*"
+    }
 
+-- user state initializer
 alexInitUserState :: AlexUserState
-alexInitUserState = AlexUserState   { activeCommentStarts = mempty }
+alexInitUserState = AlexUserState   { activeCommentStarts = [] }
 
-getActiveCommentStarts :: Alex [AlexPosn]
+-- getters and setters of the user state
+getActiveCommentStarts :: Alex AlexPosnStack
 getActiveCommentStarts = Alex $ \s@AlexState{alex_ust=ust} -> Right (s, activeCommentStarts ust)
 
-setActiveCommentStarts :: [AlexPosn] -> Alex ()
+setActiveCommentStarts :: AlexPosnStack -> Alex ()
 setActiveCommentStarts ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){activeCommentStarts=ss}}, ())
 
 pushActiveCommentStart :: AlexPosn -> Alex ()
@@ -87,41 +92,53 @@ pushActiveCommentStart p = do
     ps <- getActiveCommentStarts
     setActiveCommentStarts (p:ps)
 
-popActiveCommentStart :: Alex (AlexPosn, [AlexPosn])
+popActiveCommentStart :: Alex (AlexPosn, AlexPosnStack)
 popActiveCommentStart = do
     (p:ps) <- getActiveCommentStarts
     setActiveCommentStarts ps
     return (p, ps)
 
+-- helpers for multi-line comment handling
 startComment :: AlexInput -> Int -> Alex Token
-startComment input@(pos,_,_,_) len = do
+startComment input@(pos,_,_,_) len = do     -- setup state for comment handling
     pushActiveCommentStart pos
     skip input len
 
 embedComment :: AlexInput -> Int -> Alex Token
-embedComment input@(pos,_,_,_) len = do
+embedComment input@(pos,_,_,_) len = do     -- handle a nested comment
     pushActiveCommentStart pos
     skip input len
 
 unembedComment :: AlexInput -> Int -> Alex Token
-unembedComment input len = do
+unembedComment input len = do               -- handle close of nested comment
     (p, ps) <- popActiveCommentStart
     when (length ps == 0) (alexSetStartCode 0)
     skip input len
 
+-- helper for printing "AlexPosn" values in a more human-friendly manner
 showAlexPos :: AlexPosn -> String
 showAlexPos (AlexPn _ l c) = concat ["line ", show l, " column ", show c]
 
+-- helper for generating lexer errors
+--
+-- The first argument is a function that returns a custom error message,
+-- specified by the caller. It is invoked with the current lexeme as argument.
 lexerError :: (String -> String) -> AlexInput -> Int -> Alex Token
-lexerError mkmsg ((AlexPn _ l c),_,_,str) len = alexError (lexerMsg ++ mkmsg (take len str)) where
-    lexerMsg = concat ["Lexical error at line ", show l, ", column ", show c, ": "]
+lexerError mkmsg (pos,_,_,str) len = alexError (lexerMsg ++ mkmsg (take len str)) where
+    lexerMsg = concat ["Lexical error at ", showAlexPos pos, ": "]
 
-alexEOF :: Alex Token
-alexEOF = return EOF
-
+-- helper for defining lexer token actions
+--
+-- The first argument is a function that returns the current Token instance.
+-- It is invoked with the current lexeme as argument.
 emitToken :: (String -> Token) -> AlexInput -> Int -> Alex Token
 emitToken emiter (pos, prevc, rest, str) len = return (emiter (take len str))
 
+-- define the end-of-file token for Alex
+alexEOF :: Alex Token
+alexEOF = return EOF
+
+-- the Token type
 data Token  = IF
             | THEN
             | ELSE
@@ -143,6 +160,8 @@ data Token  = IF
             | SEMICOLON
             | EOF deriving (Eq, Show)
 
+-- wrapper function for alexMonadScan for generating a Token, emitting error
+-- messages when necessary
 scanToken :: Alex Token
 scanToken = do
     tok <- alexMonadScan
@@ -151,9 +170,11 @@ scanToken = do
         case activeComments of
             []  -> return tok
             pos -> alexError . concat $ [ "Missing ", show (length pos), " */, openning /* at:\n\t"
-                                                  , intercalate "\n\t" $ map showAlexPos pos]
+                                        , intercalate "\n\t" $ map showAlexPos pos ]
     else return tok
 
+-- helper function that scans a string and, if successful, returns a list of
+-- tokens, or emits an error otherwise
 scan :: String -> Either String [Token]
 scan str = runAlex str $ do
     let loop l = do
