@@ -36,6 +36,7 @@ import MLexer
 
 -- option processing -----------------------------------------------------------
 
+-- data type for representing program (comand line) options
 data Options = Options
     { optInFiles        :: [String] -- list of source files to compile
     , optStdIn          :: Bool     -- read source from std input
@@ -43,6 +44,7 @@ data Options = Options
     , optHelp           :: Bool     -- display usage information
     }
 
+-- initializer for options
 defaultOptions :: Options
 defaultOptions = Options
     { optInFiles = []
@@ -51,6 +53,7 @@ defaultOptions = Options
     , optHelp = False
     }
 
+-- option transformation definition (changes option values based on command line arguments)
 optionTransforms :: [OptDescr (Options -> Options)]
 optionTransforms =
     [ Option    [] ["stdin"]
@@ -64,6 +67,7 @@ optionTransforms =
                 "display this help message"
     ]
 
+-- option transformation application
 applyOptionTransforms :: [OptDescr (Options -> Options)] -> [String] -> Options -> Options
 applyOptionTransforms transforms argv defaults =
     case getOpt' Permute transforms argv of
@@ -71,6 +75,7 @@ applyOptionTransforms transforms argv defaults =
         (_, _, n, [])   -> error (concatMap (\ a -> "Unknown argument: " ++ a ++ "\n") n ++ helpMessage)
         (_,_,_,errors)  -> error (concat errors ++ helpMessage)
 
+-- help message for the application
 helpMessage :: String
 helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
                         \  Will compile the source Minisculus files. If no source files are provided,\n\
@@ -79,14 +84,17 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 
 -- main program ----------------------------------------------------------------
 
+-- run the different stages of the compiler
 compile :: String -> IO ()
 compile = genOutput . scan where
     genOutput (Right ts) = print ts
     genOutput (Left s) = putStrLn "COMPILATION ERROR:" >> putStrLn s
 
+-- compile a file (argument is path to the file)
 compileFile :: String -> IO ()
 compileFile f = readFile f >>= compile
 
+-- invoke function based on parsed command line options
 runCompiler :: Options -> IO ()
 runCompiler options
     | optHelp options           = putStrLn helpMessage      -- print help message if options '-h' or '--help' where passed
