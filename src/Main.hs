@@ -87,15 +87,20 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 
 -- main program ----------------------------------------------------------------
 
+-- define steps of a compilation
+doCompilation :: CompilerEnvironment -> CompilerMonad [Token]
+doCompilation env = do
+    c <- scan . csSource $ env
+    logMsg "Lexical analysis succeeded"
+    return c
+
 -- run the different stages of the compiler (currently only lexer)
 compile :: CompilerEnvironment -> CompilerMonad [Token]
-compile cs = case scan . csSource $ cs of
-    Right ts -> logMsg "Compilation finished successfully" >> return ts
-    Left s -> compError msg where
-        msg = concat ["\nCOMPILATION ERROR", atLocation, ":\n", s]
-        atLocation = case csSourceFile cs of
-            "" -> ""
-            f  -> " in " ++ f
+compile env = (doCompilation env) `catchCompError` handleCompError where
+    handleCompError e = logError . concat $ ["\nCOMPILATION ERROR", atLocation, ":\n", e, "\n"]
+    atLocation = case csSourceFile env of
+        "" -> ""
+        f  -> " in " ++ f
 
 -- compile a file (argument is path to the file)
 compileFile :: String -> IO (CompilerMonad [Token])
@@ -109,17 +114,21 @@ compileStdIn = do
     s <- getContents
     return . compile $ CompilerEnvironment {csSource = s, csSourceFile = ""}
 
+printLogAndOutput c = do
+    putStrLn . showCompilerOutput $ c
+    putStrLn . showCompilerLog $ c
+
 -- invoke action based on parsed command line options
 runMain :: Options -> IO ()
 runMain options
     | optHelp options           = putStrLn helpMessage
         -- print help message if options '-h' or '--help' where passed
-    | optStdIn options          = compileStdIn >>= putStrLn . showCompilerOutput
+    | optStdIn options          = compileStdIn >>= printLogAndOutput
         -- force compilation of standard input
-    | optInFiles options == []  = compileStdIn >>= putStrLn . showCompilerOutput
+    | optInFiles options == []  = compileStdIn >>= printLogAndOutput
         -- compile standard input if no source files were provided
     | otherwise                 = mconcat . map callCompiler $ optInFiles options where
-        callCompiler f = compileFile f >>= putStrLn . showCompilerOutput
+        callCompiler f = compileFile f >>= printLogAndOutput
         -- compile all source files
 
 main :: IO ()

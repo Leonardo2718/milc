@@ -27,6 +27,8 @@ module MLexer where
 
 import Control.Monad
 import Data.List
+
+import CompilerEnvironment
 }
 
 %wrapper "monadUserState"
@@ -173,13 +175,21 @@ scanToken = do
                                         , intercalate "\n\t" $ map showAlexPos pos ]
     else return tok
 
--- helper function that scans a string and, if successful, returns a list of
--- tokens, or emits an error otherwise
-scan :: String -> Either String [Token]
-scan str = runAlex str $ do
+-- helper function for scanToken that collects tokens and puts them in a list
+-- until EOF is found
+collectTokens :: Alex [Token]
+collectTokens = do
     let loop l = do
             tok <- scanToken
             if tok == EOF then return l else do loop $! (l ++ [tok])
     loop []
+
+
+-- helper function that scans a string and, if successful, returns a list of
+-- tokens, or emits an error otherwise
+scan :: String -> CompilerMonad [Token]
+scan str = rewrap $ runAlex str collectTokens where
+    rewrap (Right ts) = return ts
+    rewrap (Left e)   = compError e
 
 }
