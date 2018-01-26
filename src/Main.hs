@@ -112,10 +112,15 @@ compileStdIn = do
 -- invoke action based on parsed command line options
 runMain :: Options -> IO ()
 runMain options
-    | optHelp options           = putStrLn helpMessage  -- print help message if options '-h' or '--help' where passed
-    | optStdIn options          = compileStdIn >>= putStrLn . showCompilerOutput         -- force compilation of standard input
-    | optInFiles options == []  = compileStdIn >>= putStrLn . showCompilerOutput         -- compile standard input if no source files were provided
-    | otherwise                 = (mconcat (map (\f -> compileFile f >>= putStrLn . showCompilerOutput) $ optInFiles options))  -- compile all source files
+    | optHelp options           = putStrLn helpMessage
+        -- print help message if options '-h' or '--help' where passed
+    | optStdIn options          = compileStdIn >>= putStrLn . showCompilerOutput
+        -- force compilation of standard input
+    | optInFiles options == []  = compileStdIn >>= putStrLn . showCompilerOutput
+        -- compile standard input if no source files were provided
+    | otherwise                 = mconcat . map callCompiler $ optInFiles options where
+        callCompiler f = compileFile f >>= putStrLn . showCompilerOutput
+        -- compile all source files
 
 main :: IO ()
 main = do

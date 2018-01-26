@@ -12,7 +12,6 @@ data CompilerEnvironment = CompilerEnvironment
 
 -- monad for managing compiler log and errors
 type CompilerMonad a = ExceptT String (Writer [String]) a
-type CompilerMonadT m a = ExceptT String (WriterT [String] m) a
 
 -- unwrap compiler monad
 runCompiler :: CompilerMonad a -> (Either String a, [String])
