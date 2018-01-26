@@ -31,9 +31,11 @@ import System.Environment (getArgs)
 import System.Console.GetOpt
 import System.IO
 import Data.List
+import Control.Monad
 
 -- local imports
 import MLexer
+import CompilerEnvironment
 
 -- option processing -----------------------------------------------------------
 
@@ -85,44 +87,38 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 
 -- main program ----------------------------------------------------------------
 
--- data type representing the compiler state
-data CompilerState = CS
-    { csSource      :: String   -- the actual source code being compiled
-    , csSourceFile  :: String   -- path to the file containing the source code (empty if using stdin)
-    }
-
 -- run the different stages of the compiler (currently only lexer)
-compile :: CompilerState -> IO ()
-compile cs = genOutput . scan . csSource $ cs where
-    genOutput (Right ts) = print ts
-    genOutput (Left s) = putStrLn msg >> putStrLn s where
-        msg = concat ["\nCOMPILATION ERROR", location, ":"]
-        location = case csSourceFile cs of
+compile :: CompilerEnvironment -> CompilerMonad [Token]
+compile cs = case scan . csSource $ cs of
+    Right ts -> logMsg "Compilation finished successfully" >> return ts
+    Left s -> compError msg where
+        msg = concat ["\nCOMPILATION ERROR", atLocation, ":\n", s]
+        atLocation = case csSourceFile cs of
             "" -> ""
             f  -> " in " ++ f
 
 -- compile a file (argument is path to the file)
-compileFile :: String -> IO ()
+compileFile :: String -> IO (CompilerMonad [Token])
 compileFile f = do
     s <- readFile f
-    compile CS {csSource = s, csSourceFile = f}
+    return . compile $ CompilerEnvironment {csSource = s, csSourceFile = f}
 
 -- compile source from standard input
-compileStdIn :: IO ()
+compileStdIn :: IO (CompilerMonad [Token])
 compileStdIn = do
     s <- getContents
-    compile CS {csSource = s, csSourceFile = ""}
+    return . compile $ CompilerEnvironment {csSource = s, csSourceFile = ""}
 
--- invoke function based on parsed command line options
-runCompiler :: Options -> IO ()
-runCompiler options
+-- invoke action based on parsed command line options
+runMain :: Options -> IO ()
+runMain options
     | optHelp options           = putStrLn helpMessage  -- print help message if options '-h' or '--help' where passed
-    | optStdIn options          = compileStdIn          -- force compilation of standard input
-    | optInFiles options == []  = compileStdIn          -- compile standard input if no source files were provided
-    | otherwise                 = mconcat (map compileFile $ optInFiles options)  -- compile all source files
+    | optStdIn options          = compileStdIn >>= putStrLn . showCompilerOutput         -- force compilation of standard input
+    | optInFiles options == []  = compileStdIn >>= putStrLn . showCompilerOutput         -- compile standard input if no source files were provided
+    | otherwise                 = (mconcat (map (\f -> compileFile f >>= putStrLn . showCompilerOutput) $ optInFiles options))  -- compile all source files
 
 main :: IO ()
 main = do
     args <- getArgs
     let options = applyOptionTransforms optionTransforms args defaultOptions
-    runCompiler options
+    runMain options
