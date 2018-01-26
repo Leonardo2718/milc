@@ -44,6 +44,7 @@ data Options = Options
     { optInFiles        :: [String] -- list of source files to compile
     , optStdIn          :: Bool     -- read source from std input
     , optOutFile        :: String   -- path to output file
+    , optLogFile        :: String
     , optHelp           :: Bool     -- display usage information
     }
 
@@ -53,6 +54,7 @@ defaultOptions = Options
     { optInFiles = []
     , optStdIn = False
     , optOutFile = ""
+    , optLogFile = ""
     , optHelp = False
     }
 
@@ -65,10 +67,15 @@ optionTransforms =
     -- , Option    ['o'] ["output"]
     --             (ReqArg (\ s opts -> opts {optOutFile = s}) "FILE")
     --             "write output to specified file (defaults to standard output if not specified)"
+    , Option    ['l'] ["log"]
+                (OptArg (\ s opts -> opts {optLogFile = getLogFile s}) "FILE_NAME")
+                "write log to file FILE_NAME"
     , Option    ['h'] ["help"]
                 (NoArg (\ opts -> opts {optHelp = True}) )
                 "display this help message"
-    ]
+    ] where
+        getLogFile (Just f) = f
+        getLogFile Nothing  = "mcomp.log"
 
 -- option transformation application
 applyOptionTransforms :: [OptDescr (Options -> Options)] -> [String] -> Options -> Options
@@ -114,21 +121,22 @@ compileStdIn = do
     s <- getContents
     return . compile $ CompilerEnvironment {csSource = s, csSourceFile = ""}
 
-printLogAndOutput c = do
+printLogAndOutput options c = do
     putStrLn . showCompilerOutput $ c
-    putStrLn . showCompilerLog $ c
+    when (optLogFile options /= "") (appendFile (optLogFile options) . showCompilerLog $ c)
 
 -- invoke action based on parsed command line options
 runMain :: Options -> IO ()
 runMain options
     | optHelp options           = putStrLn helpMessage
         -- print help message if options '-h' or '--help' where passed
-    | optStdIn options          = compileStdIn >>= printLogAndOutput
+    | optStdIn options          = compileStdIn >>= printLogAndOutput options
         -- force compilation of standard input
-    | optInFiles options == []  = compileStdIn >>= printLogAndOutput
+    | optInFiles options == []  = compileStdIn >>= printLogAndOutput options
         -- compile standard input if no source files were provided
-    | otherwise                 = mconcat . map callCompiler $ optInFiles options where
-        callCompiler f = compileFile f >>= printLogAndOutput
+    | otherwise                 = compileAllFiles  $ optInFiles options where
+        compileAllFiles = mconcat . map callCompiler
+        callCompiler f = compileFile f >>= printLogAndOutput options
         -- compile all source files
 
 main :: IO ()
