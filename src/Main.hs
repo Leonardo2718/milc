@@ -115,6 +115,14 @@ compileFile f = do
     s <- readFile f
     return . compile $ CompilerEnvironment {csSource = s, csSourceFile = f}
 
+-- compile multiple files, merging their compilation output together
+compileFiles :: [String] -> IO (CompilerMonad [Token])
+compileFiles [f] = compileFile f
+compileFiles (f:fs) = do
+    c <- compileFile f
+    cs <- compileFiles fs
+    return $ mergeCompilers c cs
+
 -- compile source from standard input
 compileStdIn :: IO (CompilerMonad [Token])
 compileStdIn = do
@@ -123,7 +131,7 @@ compileStdIn = do
 
 printLogAndOutput options c = do
     putStrLn . showCompilerOutput $ c
-    when (optLogFile options /= "") (appendFile (optLogFile options) . showCompilerLog $ c)
+    when (optLogFile options /= "") (writeFile (optLogFile options) . showCompilerLog $ c)
 
 -- invoke action based on parsed command line options
 runMain :: Options -> IO ()
@@ -134,10 +142,7 @@ runMain options
         -- force compilation of standard input
     | optInFiles options == []  = compileStdIn >>= printLogAndOutput options
         -- compile standard input if no source files were provided
-    | otherwise                 = compileAllFiles  $ optInFiles options where
-        compileAllFiles = mconcat . map callCompiler
-        callCompiler f = compileFile f >>= printLogAndOutput options
-        -- compile all source files
+    | otherwise                 = (compileFiles $ optInFiles options) >>= printLogAndOutput options
 
 main :: IO ()
 main = do
