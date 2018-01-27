@@ -31,6 +31,7 @@ import System.Environment (getArgs)
 import System.Console.GetOpt
 import System.IO
 import Data.List
+import Data.Foldable
 import Control.Monad
 
 -- local imports
@@ -97,7 +98,7 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 -- define steps of a compilation
 doCompilation :: CompilerEnvironment -> CompilerMonad [Token]
 doCompilation env = do
-    c <- scan . csSource $ env
+    c <- scan env . csSource $ env
     logMsg "Lexical analysis succeeded"
     return c
 
@@ -113,7 +114,9 @@ compile env = (doCompilation env) `catchCompError` handleCompError where
 compileFile :: String -> IO (CompilerMonad [Token])
 compileFile f = do
     s <- readFile f
-    return . compile $ CompilerEnvironment {csSource = s, csSourceFile = f}
+    return $ do
+        logMsg ("Compiling " ++ f)
+        compile CompilerEnvironment {csSource = s, csSourceFile = f}
 
 -- compile multiple files, merging their compilation output together
 compileFiles :: [String] -> IO (CompilerMonad [Token])
@@ -129,6 +132,8 @@ compileStdIn = do
     s <- getContents
     return . compile $ CompilerEnvironment {csSource = s, csSourceFile = ""}
 
+-- print the compiler's output and log
+printLogAndOutput :: Show a => Options -> CompilerMonad a -> IO ()
 printLogAndOutput options c = do
     putStrLn . showCompilerOutput $ c
     when (optLogFile options /= "") (writeFile (optLogFile options) . showCompilerLog $ c)

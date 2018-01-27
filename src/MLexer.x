@@ -75,19 +75,24 @@ tokens :-
 -- user state data type (for use with `monadUserState` wrapper)
 type AlexPosnStack = [AlexPosn]
 data AlexUserState = AlexUserState
-    { activeCommentStarts :: AlexPosnStack  -- stores the position of currently active (un-closed) "/*"
+    { activeCommentStarts   :: AlexPosnStack        -- stores the position of currently active (un-closed) "/*"
+    , compilerEnvironment   :: CompilerEnvironment  -- access to current compilation Environment
+    , lexerLog              :: [String]             -- lexer log messages
     }
 
 -- user state initializer
 alexInitUserState :: AlexUserState
-alexInitUserState = AlexUserState   { activeCommentStarts = [] }
+alexInitUserState = AlexUserState   { activeCommentStarts   = []
+                                    , compilerEnvironment   = CompilerEnvironment "" ""
+                                    , lexerLog              = []
+                                    }
 
 -- getters and setters of the user state
 getActiveCommentStarts :: Alex AlexPosnStack
-getActiveCommentStarts = Alex $ \s@AlexState{alex_ust=ust} -> Right (s, activeCommentStarts ust)
+getActiveCommentStarts = Alex $ \ s@AlexState{alex_ust=ust} -> Right (s, activeCommentStarts ust)
 
 setActiveCommentStarts :: AlexPosnStack -> Alex ()
-setActiveCommentStarts ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){activeCommentStarts=ss}}, ())
+setActiveCommentStarts ss = Alex $ \ s -> Right (s{alex_ust=(alex_ust s){activeCommentStarts=ss}}, ())
 
 pushActiveCommentStart :: AlexPosn -> Alex ()
 pushActiveCommentStart p = do
@@ -99,6 +104,23 @@ popActiveCommentStart = do
     (p:ps) <- getActiveCommentStarts
     setActiveCommentStarts ps
     return (p, ps)
+
+getCompilerEnvironment :: Alex CompilerEnvironment
+getCompilerEnvironment = Alex $ \ s@AlexState{alex_ust=ust} -> Right (s, compilerEnvironment ust)
+
+setCompilerEnvironment :: CompilerEnvironment -> Alex ()
+setCompilerEnvironment env = Alex $ \ s -> Right (s{alex_ust=(alex_ust s){compilerEnvironment=env}}, ())
+
+getLexerLog :: Alex [String]
+getLexerLog = Alex $ \ s@AlexState{alex_ust=ust} -> Right (s, lexerLog ust)
+
+setLexerLog :: [String] -> Alex ()
+setLexerLog l = Alex $ \ s -> Right (s{alex_ust=(alex_ust s){lexerLog=l}}, ())
+
+lexerLogMsg :: String -> Alex ()
+lexerLogMsg msg = do
+    l <- getLexerLog
+    setLexerLog (l ++ [msg])
 
 -- helpers for multi-line comment handling
 startComment :: AlexInput -> Int -> Alex Token
@@ -167,6 +189,7 @@ data Token  = IF
 scanToken :: Alex Token
 scanToken = do
     tok <- alexMonadScan
+    lexerLogMsg . concat $ ["Found token ", show tok]
     if tok == EOF then do
         activeComments <- getActiveCommentStarts
         case activeComments of
@@ -184,11 +207,10 @@ collectTokens = do
             if tok == EOF then return l else do loop $! (l ++ [tok])
     loop []
 
-
 -- helper function that scans a string and, if successful, returns a list of
 -- tokens, or emits an error otherwise
-scan :: String -> CompilerMonad [Token]
-scan str = rewrap $ runAlex str collectTokens where
+scan :: CompilerEnvironment -> String -> CompilerMonad [Token]
+scan env str = rewrap $ runAlex str (setCompilerEnvironment env >> collectTokens) where
     rewrap (Right ts) = return ts
     rewrap (Left e)   = compError e
 
