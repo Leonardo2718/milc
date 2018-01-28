@@ -49,9 +49,9 @@ showCompilerOutput c = case runCompiler c of
         (Right ts, l) -> show ts
         (Left e, l)   -> e
 
--- unwarp and convert to a string the compiler log
+-- unwarp the compiler log and convert it to a string
 showCompilerLog :: CompilerMonad a -> String
-showCompilerLog c = case runCompiler c of (_, l) -> intercalate "\n" l
+showCompilerLog c = case runCompiler c of (_, l) -> concat l
 
 -- merge two compiler instances
 mergeCompilers :: Monoid a => CompilerMonad a -> CompilerMonad a -> CompilerMonad a
@@ -67,10 +67,13 @@ mergeCompilers c1 c2 = merge (runCompiler c1) (runCompiler c2) where
 logMsg :: String -> CompilerMonad ()
 logMsg s = writer ((), [s])
 
+logMsgLn :: String -> CompilerMonad ()
+logMsgLn s = logMsg (s ++ "\n")
+
 -- generate a compilation error with the given message
 logError :: String -> CompilerMonad a
 logError s = do
-    logMsg s
+    logMsgLn s
     throwError s
 
 -- generate a compilation error with the given message

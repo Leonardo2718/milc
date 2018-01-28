@@ -197,10 +197,10 @@ collectTokens = do
 -- tokens, or emits an error otherwise
 scan :: CompilerEnvironment -> String -> CompilerMonad [Token]
 scan env str = do
-    logMsg "=== Running lexical analysis ==="
+    logMsgLn "=== Running lexical analysis ==="
     ts <- rewrap $ runAlex str (setCompilerEnvironment env >> collectTokens)
-    logMsg "Lexical analysis succeeded"
-    logMsg $ concat ["Tokens: ", show ts]
+    logMsgLn "Lexical analysis succeeded"
+    logMsgLn $ concat ["Tokens: ", show ts]
     return ts
     where
         rewrap (Right ts) = return ts

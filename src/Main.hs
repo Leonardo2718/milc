@@ -98,8 +98,14 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 -- define steps of a compilation
 doCompilation :: CompilerEnvironment -> CompilerMonad [Token]
 doCompilation env = do
+    logMsgLn $ concat ["======= Compiling ", source , " ======="]
     c <- scan env . csSource $ env
+    logMsgLn "Compilation succeeded\n"
     return c
+    where
+        source = case csSourceFile env of
+            "" -> "standard input"
+            f -> f
 
 -- run the different stages of the compiler (currently only lexer)
 compile :: CompilerEnvironment -> CompilerMonad [Token]
@@ -113,9 +119,7 @@ compile env = (doCompilation env) `catchCompError` handleCompError where
 compileFile :: String -> IO (CompilerMonad [Token])
 compileFile f = do
     s <- readFile f
-    return $ do
-        logMsg ("Compiling " ++ f)
-        compile CompilerEnvironment {csSource = s, csSourceFile = f}
+    return $ compile CompilerEnvironment {csSource = s, csSourceFile = f}
 
 -- compile multiple files, merging their compilation output together
 compileFiles :: [String] -> IO (CompilerMonad [Token])
@@ -147,6 +151,7 @@ runMain options
     | optInFiles options == []  = compileStdIn >>= printLogAndOutput options
         -- compile standard input if no source files were provided
     | otherwise                 = (compileFiles $ optInFiles options) >>= printLogAndOutput options
+        -- compile all source files
 
 main :: IO ()
 main = do
