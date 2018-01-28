@@ -77,14 +77,12 @@ type AlexPosnStack = [AlexPosn]
 data AlexUserState = AlexUserState
     { activeCommentStarts   :: AlexPosnStack        -- stores the position of currently active (un-closed) "/*"
     , compilerEnvironment   :: CompilerEnvironment  -- access to current compilation Environment
-    , lexerLog              :: [String]             -- lexer log messages
     }
 
 -- user state initializer
 alexInitUserState :: AlexUserState
 alexInitUserState = AlexUserState   { activeCommentStarts   = []
                                     , compilerEnvironment   = CompilerEnvironment "" ""
-                                    , lexerLog              = []
                                     }
 
 -- getters and setters of the user state
@@ -110,17 +108,6 @@ getCompilerEnvironment = Alex $ \ s@AlexState{alex_ust=ust} -> Right (s, compile
 
 setCompilerEnvironment :: CompilerEnvironment -> Alex ()
 setCompilerEnvironment env = Alex $ \ s -> Right (s{alex_ust=(alex_ust s){compilerEnvironment=env}}, ())
-
-getLexerLog :: Alex [String]
-getLexerLog = Alex $ \ s@AlexState{alex_ust=ust} -> Right (s, lexerLog ust)
-
-setLexerLog :: [String] -> Alex ()
-setLexerLog l = Alex $ \ s -> Right (s{alex_ust=(alex_ust s){lexerLog=l}}, ())
-
-lexerLogMsg :: String -> Alex ()
-lexerLogMsg msg = do
-    l <- getLexerLog
-    setLexerLog (l ++ [msg])
 
 -- helpers for multi-line comment handling
 startComment :: AlexInput -> Int -> Alex Token
@@ -189,7 +176,6 @@ data Token  = IF
 scanToken :: Alex Token
 scanToken = do
     tok <- alexMonadScan
-    lexerLogMsg . concat $ ["Found token ", show tok]
     if tok == EOF then do
         activeComments <- getActiveCommentStarts
         case activeComments of
@@ -210,8 +196,14 @@ collectTokens = do
 -- helper function that scans a string and, if successful, returns a list of
 -- tokens, or emits an error otherwise
 scan :: CompilerEnvironment -> String -> CompilerMonad [Token]
-scan env str = rewrap $ runAlex str (setCompilerEnvironment env >> collectTokens) where
-    rewrap (Right ts) = return ts
-    rewrap (Left e)   = compError e
+scan env str = do
+    logMsg "=== Running lexical analysis ==="
+    ts <- rewrap $ runAlex str (setCompilerEnvironment env >> collectTokens)
+    logMsg "Lexical analysis succeeded"
+    logMsg $ concat ["Tokens: ", show ts]
+    return ts
+    where
+        rewrap (Right ts) = return ts
+        rewrap (Left e)   = compError e
 
 }

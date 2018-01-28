@@ -99,7 +99,6 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 doCompilation :: CompilerEnvironment -> CompilerMonad [Token]
 doCompilation env = do
     c <- scan env . csSource $ env
-    logMsg "Lexical analysis succeeded"
     return c
 
 -- run the different stages of the compiler (currently only lexer)
