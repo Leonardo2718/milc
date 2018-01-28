@@ -7,8 +7,15 @@
  * it is printed and the program terminates.
  */
 
-guess := 50;
-interval := 25;
+min := 1;
+max := 100;
+
+% input min;
+% input max;
+
+interval := max - min + 1;
+guess := max - interval;
+
 notCorrect := 1;
 
 while notCorrect do
@@ -16,31 +23,28 @@ while notCorrect do
         write guess;
         input i;
 
-        if i then
-            % if i != 0 then it must be either -1 or 1
+        if i then   % if i != 0 then it should be either -1 or 1
             begin
-                if i - 1 then
-                    % if i - 1 != 0 then i should be -1
+                if i - 1 then   % if i - 1 != 0 then i should be -1
                     begin
-                        if (i + 1) then
-                            % if i + 1 != 0 then i is not -1, 0, or 1, so we error out
+                        if (i + 1) then     % if i + 1 != 0 then i is not -1, 0, or 1, so we error out
                             begin
                                 guess := -1;
                                 notCorrect := 0;
                             end
-                        else % if i + 1 == 0 then i = -1 and our guess is too low
+                        else    % if i + 1 == 0 then i = -1 and our guess is too low
                             begin
-                                guess := (guess - interval);
-                                interval := interval / 2;
+                                guess := (guess + interval);
                             end
                     end
-                else % if i - 1 == 0 then i = 1 and our guess is too high
+                else    % if i - 1 == 0 then i = 1 and our guess is too high
                     begin
-                        guess := guess + interval;
-                        interval := interval / 2;
+                        guess := guess - interval;
                     end
+                interval := interval / 2;
+                if interval then begin end else interval = 1;   % if interval == 0 then interval = 1
             end
-        else notCorrect := 0;  % if i == 0 then we found the number !
+        else notCorrect := 0;   % if i == 0 then we found the number !
     end
 
 write guess;
