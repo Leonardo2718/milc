@@ -100,7 +100,7 @@ doCompilation :: CompilerEnvironment -> CompilerMonad [Token]
 doCompilation env = do
     logMsgLn $ concat ["======= Compiling ", source , " ======="]
     c <- scan env . envSource $ env
-    logMsgLn "Compilation succeeded\n"
+    logMsgLn "\nCOMPILATION SUCCEEDED!\n"
     return c
     where
         source = case envSourceFile env of
