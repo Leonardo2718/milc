@@ -135,8 +135,12 @@ showAlexPos (AlexPn _ l c) = concat ["line ", show l, " column ", show c]
 -- The first argument is a function that returns a custom error message,
 -- specified by the caller. It is invoked with the current lexeme as argument.
 lexerError :: (String -> String) -> AlexInput -> Int -> Alex Token
-lexerError mkmsg (pos,_,_,str) len = alexError (lexerMsg ++ mkmsg (take len str)) where
-    lexerMsg = concat ["Lexical error at ", showAlexPos pos, ": "]
+lexerError mkmsg (pos,_,_,str) len = do
+    env <- getCompilerEnvironment
+    let lexerMsg = concat ["Lexical error at ", showAlexPos pos, ": ", mkmsg (take len str), "\n"
+                          , let AlexPn _ l c = pos in showErrorLocation (csSource env) l c
+                          ]
+    alexError lexerMsg
 
 -- helper for defining lexer token actions
 --
@@ -178,10 +182,16 @@ scanToken = do
     tok <- alexMonadScan
     if tok == EOF then do
         activeComments <- getActiveCommentStarts
+        env <- getCompilerEnvironment
         case activeComments of
             []  -> return tok
-            pos -> alexError . concat $ [ "Missing ", show (length pos), " */, openning /* at:\n\t"
-                                        , intercalate "\n\t" $ map showAlexPos pos ]
+            pos -> do
+                let msg = concat $  [ "Missing ", show (length pos), " */, openning /* at:\n\t"
+                                    , intercalate "\n\t" $ map errorPos pos, "\n"
+                                    ]
+                    errorPos p = showAlexPos p ++ "\n" ++ showErrorLocationL "\t" (csSource env) l c where
+                        AlexPn _ l c = p
+                alexError msg
     else return tok
 
 -- helper function for scanToken that collects tokens and puts them in a list
