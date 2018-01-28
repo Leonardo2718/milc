@@ -146,34 +146,35 @@ lexerError mkmsg (pos,_,_,str) len = do
 --
 -- The first argument is a function that returns the current Token instance.
 -- It is invoked with the current lexeme as argument.
-emitToken :: (String -> Token) -> AlexInput -> Int -> Alex Token
-emitToken emiter (pos, prevc, rest, str) len = return (emiter (take len str))
+emitToken :: (String -> TokenType) -> AlexInput -> Int -> Alex Token
+emitToken emiter (pos, prevc, rest, str) len = return $ Token (emiter (take len str)) pos
 
 -- define the end-of-file token for Alex
 alexEOF :: Alex Token
 alexEOF = return EOF
 
 -- the Token type
-data Token  = IF
-            | THEN
-            | ELSE
-            | WHILE
-            | DO
-            | BEGIN
-            | END
-            | INPUT
-            | WRITE
-            | ID String
-            | NUM Int
-            | ASSIGN
-            | ADD
-            | SUB
-            | MUL
-            | DIV
-            | LPAR
-            | RPAR
-            | SEMICOLON
-            | EOF deriving (Eq, Show)
+data TokenType  = IF
+                | THEN
+                | ELSE
+                | WHILE
+                | DO
+                | BEGIN
+                | END
+                | INPUT
+                | WRITE
+                | ID String
+                | NUM Int
+                | ASSIGN
+                | ADD
+                | SUB
+                | MUL
+                | DIV
+                | LPAR
+                | RPAR
+                | SEMICOLON deriving (Eq, Show)
+
+data Token  = Token TokenType AlexPosn | EOF deriving (Eq, Show)
 
 -- wrapper function for alexMonadScan for generating a Token, emitting error
 -- messages when necessary
