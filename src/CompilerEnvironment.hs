@@ -32,8 +32,8 @@ import Data.List
 
 -- data type representing the compiler state
 data CompilerEnvironment = CompilerEnvironment
-    { csSource      :: String   -- the actual source code being compiled
-    , csSourceFile  :: String   -- path to the file containing the source code (empty if using stdin)
+    { envSource      :: String   -- the actual source code being compiled
+    , envSourceFile  :: String   -- path to the file containing the source code (empty if using stdin)
     }
 
 -- monad for managing compiler log and errors

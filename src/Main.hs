@@ -99,11 +99,11 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 doCompilation :: CompilerEnvironment -> CompilerMonad [Token]
 doCompilation env = do
     logMsgLn $ concat ["======= Compiling ", source , " ======="]
-    c <- scan env . csSource $ env
+    c <- scan env . envSource $ env
     logMsgLn "Compilation succeeded\n"
     return c
     where
-        source = case csSourceFile env of
+        source = case envSourceFile env of
             "" -> "standard input"
             f -> f
 
@@ -111,7 +111,7 @@ doCompilation env = do
 compile :: CompilerEnvironment -> CompilerMonad [Token]
 compile env = (doCompilation env) `catchCompError` handleCompError where
     handleCompError e = logError . concat $ ["\nCOMPILATION ERROR", atLocation, ":\n", e, "\n"]
-    atLocation = case csSourceFile env of
+    atLocation = case envSourceFile env of
         "" -> ""
         f  -> " in " ++ f
 
@@ -119,7 +119,7 @@ compile env = (doCompilation env) `catchCompError` handleCompError where
 compileFile :: String -> IO (CompilerMonad [Token])
 compileFile f = do
     s <- readFile f
-    return $ compile CompilerEnvironment {csSource = s, csSourceFile = f}
+    return $ compile CompilerEnvironment {envSource = s, envSourceFile = f}
 
 -- compile multiple files, merging their compilation output together
 compileFiles :: [String] -> IO (CompilerMonad [Token])
@@ -133,7 +133,7 @@ compileFiles (f:fs) = do
 compileStdIn :: IO (CompilerMonad [Token])
 compileStdIn = do
     s <- getContents
-    return . compile $ CompilerEnvironment {csSource = s, csSourceFile = ""}
+    return . compile $ CompilerEnvironment {envSource = s, envSourceFile = ""}
 
 -- print the compiler's output and log
 printLogAndOutput :: Show a => Options -> CompilerMonad a -> IO ()

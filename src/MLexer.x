@@ -138,7 +138,7 @@ lexerError :: (String -> String) -> AlexInput -> Int -> Alex Token
 lexerError mkmsg (pos,_,_,str) len = do
     env <- getCompilerEnvironment
     let lexerMsg = concat ["Lexical error at ", showAlexPos pos, ": ", mkmsg (take len str), "\n"
-                          , let AlexPn _ l c = pos in showErrorLocation (csSource env) l c
+                          , let AlexPn _ l c = pos in showErrorLocation (envSource env) l c
                           ]
     alexError lexerMsg
 
@@ -189,7 +189,7 @@ scanToken = do
                 let msg = concat $  [ "Missing ", show (length pos), " */, openning /* at:\n\t"
                                     , intercalate "\n\t" $ map errorPos pos, "\n"
                                     ]
-                    errorPos p = showAlexPos p ++ "\n" ++ showErrorLocationL "\t" (csSource env) l c where
+                    errorPos p = showAlexPos p ++ "\n" ++ showErrorLocationL "\t" (envSource env) l c where
                         AlexPn _ l c = p
                 alexError msg
     else return tok
