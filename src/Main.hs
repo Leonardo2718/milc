@@ -35,8 +35,9 @@ import Data.Foldable
 import Control.Monad
 
 -- local imports
-import MLexer
 import CompilerEnvironment
+import MLexer
+import MRDParser
 
 -- option processing -----------------------------------------------------------
 
@@ -99,9 +100,10 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 doCompilation :: CompilerEnvironment -> CompilerMonad [Token]
 doCompilation env = do
     logMsgLn $ concat ["======= Compiling ", source , " ======="]
-    c <- scan env . envSource $ env
+    ts <- scan env . envSource $ env
+    ts' <- parse ts
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"
-    return c
+    return ts'
     where
         source = case envSourceFile env of
             "" -> "standard input"
