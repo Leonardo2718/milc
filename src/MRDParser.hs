@@ -109,6 +109,10 @@ factor -> LPAR expr RPAR
 import CompilerEnvironment
 import MLexer
 
+parseError :: String -> Token -> CompilerMonad a
+parseError mkmsg t@(Token _ pos@(AlexPn _ l c)) = logError msg where
+    msg = concat $ ["Parsing error at ", showAlexPos pos, ": ", mkmsg]
+
 data AST = AST Statement
 data Statement = IfThenElse {stmtExpr :: Expression, thenBranch :: Statement, elseBranch :: Statement}
                | WhileDo {stmtExpr :: Expression, doStmt :: Statement}
@@ -134,62 +138,60 @@ eatTerminal tt ts = case ts of
     t@(Token tt' _):ts' -> if tt == tt'
         then do
             logMsgLn ("-- eating terminal: " ++ show t)
-            -- logMsgLn ("-- remaining tokens: " ++ show ts')
             return ts'
-        else compError ("Expecting " ++ show tt ++ " but found " ++ show tt' ++ " instead")
+        else parseError (concat ["Unexpected token\n    expecting ", show tt, " but found ", show tt', " instead"]) t
 
 parse :: [Token] -> CompilerMonad [Token]
 parse ts = do
     logMsgLn "=== Running parser ==="
-    logMsgLn "Looking for a statement"
     parseStatement ts
 
 parseStatement :: [Token] -> CompilerMonad [Token]
-
-parseStatement (t@(Token IF _):ts) = do
-    logMsgLn "-- parsing If Then Else statement"
-    logTerminal t ts
-    parseExpression ts >>= eatTerminal THEN >>= parseStatement >>= eatTerminal ELSE >>= parseStatement
-
-parseStatement (t@(Token WHILE _):ts) = do
-    logMsgLn "-- parsing While Do statement"
-    logTerminal t ts
-    parseExpression ts >>= eatTerminal DO >>= parseStatement
-
-parseStatement (t1@(Token INPUT _):t2@(Token (ID _) _):ts) = do
-    logMsgLn "-- parsing Input statement"
-    logTerminal t1 (t2:ts)
-    logTerminal t2 ts
-    return ts
-
-parseStatement (t1@(Token (ID _) _):t2@(Token ASSIGN _):ts) = do
-    logMsgLn "-- parsing Assignment"
-    logTerminal t1 (t2:ts)
-    logTerminal t2 ts
-    logMsgLn "Looking for an expression"
-    parseExpression ts
-
-parseStatement (t@(Token WRITE _):ts) = do
-    logMsgLn "-- parsing Write statement"
-    logTerminal t ts
-    logMsgLn "Looking for an expression"
-    parseExpression ts
-
-parseStatement (t@(Token BEGIN _):ts) = do
-    logMsgLn "-- parsing Block statement"
-    logTerminal t ts
-    logMsgLn "Looking for Statements"
-    parseStatementList ts
+parseStatement ts = do
+    logMsgLn "Looking for a Statement"
+    stmt <- case ts of
+        t@(Token IF _):ts' -> do
+            logMsgLn "-- parsing If Then Else statement"
+            logTerminal t ts'
+            parseExpression ts' >>= eatTerminal THEN >>= parseStatement >>= eatTerminal ELSE >>= parseStatement
+        t@(Token WHILE _):ts' -> do
+            logMsgLn "-- parsing While Do statement"
+            logTerminal t ts'
+            parseExpression ts' >>= eatTerminal DO >>= parseStatement
+        t1@(Token INPUT _):t2@(Token (ID _) _):ts' -> do
+            logMsgLn "-- parsing Input statement"
+            logTerminal t1 (t2:ts')
+            logTerminal t2 ts'
+            return ts'
+        t1@(Token (ID _) _):t2@(Token ASSIGN _):ts' -> do
+            logMsgLn "-- parsing Assignment"
+            logTerminal t1 (t2:ts')
+            logTerminal t2 ts'
+            logMsgLn "Looking for an expression"
+            parseExpression ts'
+        t@(Token WRITE _):ts' -> do
+            logMsgLn "-- parsing Write statement"
+            logTerminal t ts'
+            logMsgLn "Looking for an expression"
+            parseExpression ts'
+        t@(Token BEGIN _):ts' -> do
+            logMsgLn "-- parsing Block statement"
+            logTerminal t ts'
+            parseStatementList ts'
+        [] -> compError "Expecting more tokens to parse a Statement"
+        t@(Token tt _):_ -> parseError ("Unexpected token: " ++ show tt) t
+    logMsgLn "Found a Statement"
+    return stmt
 
 parseStatementList :: [Token] -> CompilerMonad [Token]
-parseStatementList (Token END _:ts) = do
-    logMsgLn "-- found end of Block statement"
-    return ts
-parseStatementList ts = do
-    stmt <- parseStatement ts
-    logMsgLn "Found a sub Statement"
-    -- logMsgLn ("-- remaining tokens: " ++ show stmt)
-    eatTerminal SEMICOLON stmt >>= parseStatementList
+parseStatementList ts = logMsgLn "Looking for Sub-Statements" >> case ts of
+    Token END _:ts' -> do
+        logMsgLn "-- found end of Block statement"
+        return ts'
+    _ -> do
+        stmt <- parseStatement ts
+        logMsgLn "Statement is a Sub-Statement"
+        eatTerminal SEMICOLON stmt >>= parseStatementList
 
 parseExpression :: [Token] -> CompilerMonad [Token]
 parseExpression [] = compError "Expecting more tokens to parse expression"
@@ -208,7 +210,7 @@ parseExpression ts = do
             Token LPAR _    -> logMsgLn "-- looking for subexpression" >> parseExpression ts' >>= eatTerminal RPAR
             Token (ID _) _  -> return ts'
             Token (NUM _) _ -> return ts'
-            _               -> compError ("Unexpected: " ++ show t)
+            Token tt _      -> parseError ("Unexpected token: " ++ show tt) t
         eatAddOp (t:ts') = logTerminal t ts' >> case t of
             Token ADD _ -> parseExpression ts'
             Token SUB _ -> parseExpression ts'
