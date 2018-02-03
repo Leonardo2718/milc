@@ -112,24 +112,58 @@ import Control.Monad.State
 import CompilerEnvironment
 import MLexer
 
-data ParserState = ParserState {lastToken :: Token}
+data ParserState = ParserState  { compilerEnv       :: CompilerEnvironment
+                                , remainingTokens   :: [Token]
+                                , lastParsedToken   :: Token
+                                }
 type ParserStateMonad = State ParserState
 type Parser a = CompilerMonadT a ParserStateMonad
 
-runParser :: Parser a -> CompilerMonad (a, ParserState)
-runParser p = do
-    let (c, s) = runState (runCompilerT p) (ParserState EOF)
+initParserState :: CompilerEnvironment -> [Token] -> ParserState
+initParserState env ts = ParserState {compilerEnv=env, remainingTokens=ts, lastParsedToken=EOF}
+
+getEnv :: Parser CompilerEnvironment
+getEnv = do
+    s <- get
+    return $ compilerEnv s
+
+setEnv :: CompilerEnvironment -> Parser ()
+setEnv env = do
+    s <- get
+    put (s{compilerEnv=env})
+
+getTokens :: Parser [Token]
+getTokens = do
+    s <- get
+    return $ remainingTokens s
+
+setTokens :: [Token] -> Parser ()
+setTokens ts = do
+    s <- get
+    put (s{remainingTokens=ts})
+
+getLastParsedToken :: Parser Token
+getLastParsedToken = do
+    s <- get
+    return $ lastParsedToken s
+
+setLastParsedToken :: Token -> Parser ()
+setLastParsedToken t = do
+    s <- get
+    put (s{lastParsedToken=t})
+
+runParser :: CompilerEnvironment -> Parser a -> [Token] -> CompilerMonad (a, ParserState)
+runParser env p ts = do
+    let (c, s) = runState (runCompilerT p) (initParserState env ts)
     a <- compiler c
     return (a, s)
 
-setLastToken :: Token -> Parser ()
-setLastToken t = do
-    s <- get
-    put (s{lastToken=t})
-
 parseError :: String -> Token -> Parser a
-parseError mkmsg t@(Token _ pos@(AlexPn _ l c)) = logError msg where
-    msg = concat $ ["Parsing error at ", showAlexPos pos, ": ", mkmsg]
+parseError mkmsg t@(Token _ pos@(AlexPn _ l c)) = do
+    -- env <- getEnv
+    let msg = concat $ ["Parsing error at ", showAlexPos pos, ": ", mkmsg]--, "\n"
+                       --, showErrorLocation (envSource env) l c]
+    logError msg
 
 showFirst :: Show a => Int -> [a] -> String
 showFirst n l = if length l > n
@@ -157,105 +191,138 @@ logTerminal t ts = do
     logMsgLn ("-- found terminal: " ++ show t)
     logMsgLn ("   remaining tokens: " ++ showFirst 4 ts)
 
-eatTerminal :: TokenType -> [Token] -> Parser [Token]
-eatTerminal tt ts = case ts of
-    [] -> compError ("Expecting to find " ++ show tt)
-    t@(Token tt' _):ts' -> if tt == tt'
-        then do
-            logMsgLn ("-- eating terminal: " ++ show t)
-            logMsgLn ("   remaining tokens: " ++ showFirst 4 ts')
-            return ts'
-        else parseError (concat ["Missing ", show tt, " token"]) t
+peekToken :: Parser Token
+peekToken = do
+    ts <- getTokens
+    case ts of
+        [] -> return EOF
+        t:ts -> do
+            logMsgLn ("-- peeking terminal: " ++ show t)
+            return t
 
-parse :: [Token] -> CompilerMonad [Token]
-parse ts = do
+popToken :: Parser Token
+popToken = do
+    ts <- getTokens
+    case ts of
+        [] -> return EOF
+        t:ts' -> do
+            setTokens ts'
+            setLastParsedToken t
+            logMsgLn ("-- found terminal: " ++ show t)
+            logMsgLn ("   remaining tokens: " ++ showFirst 4 ts')
+            return t
+
+eatTerminal :: TokenType -> Parser [Token]
+eatTerminal tt = do
+    t <- popToken
+    case t of
+        Token tt' _ -> if tt == tt'
+            then do
+                -- logMsgLn ("-- eating terminal: " ++ show t)
+                ts <- getTokens
+                -- logMsgLn ("   remaining tokens: " ++ showFirst 4 ts)
+                return ts
+            else parseError (concat ["Missing ", show tt, " token"]) t
+        _ -> parseError ("Expecting to find " ++ show tt ++", got " ++ show t ++ " instead") t
+
+parse :: CompilerEnvironment -> [Token] -> CompilerMonad [Token]
+parse env ts = do
     logMsgLn "=== Running parser ==="
-    (ts', _) <- runParser (parseStatement ts)
+    (ts', _) <- runParser env parseStatement ts
     return ts'
 
-parseStatement :: [Token] -> Parser [Token]
-parseStatement ts = do
+parseStatement :: Parser [Token]
+parseStatement = do
     logMsgLn "Looking for a Statement"
-    stmt <- case ts of
-        t@(Token IF _):ts' -> do
-            logTerminal t ts'
+    t <- popToken
+    stmt <- case t of
+        Token IF _ -> do
             logMsgLn "-- parsing If Then Else statement"
-            parseExpression ts' >>= eatTerminal THEN >>= parseStatement >>= eatTerminal ELSE >>= parseStatement
-        t@(Token WHILE _):ts' -> do
-            logTerminal t ts'
+            parseExpression >> eatTerminal THEN >> parseStatement >> eatTerminal ELSE >> parseStatement
+        Token WHILE _ -> do
             logMsgLn "-- parsing While Do statement"
-            parseExpression ts' >>= eatTerminal DO >>= parseStatement
-        t1@(Token INPUT _):t2@(Token (ID _) _):ts' -> do
-            logTerminal t1 (t2:ts')
-            logTerminal t2 ts'
-            logMsgLn "-- parsing Input statement"
-            return ts'
-        t1@(Token (ID _) _):t2@(Token ASSIGN _):ts' -> do
-            logTerminal t1 (t2:ts')
-            logTerminal t2 ts'
-            logMsgLn "-- parsing Assignment"
-            parseExpression ts'
-        t@(Token WRITE _):ts' -> do
-            logTerminal t ts'
+            parseExpression >> eatTerminal DO >> parseStatement
+        Token INPUT _ -> do
+            t' <- popToken
+            ts' <- getTokens
+            case t' of
+                Token (ID _) _ -> logMsgLn "-- parsing Input statement" >> return ts'
+                Token tt _ -> parseError ("Unexpected token: " ++ show tt ++ "\nExpected an ID") t'
+        Token (ID _) _ -> do
+            t' <- popToken
+            ts' <- getTokens
+            case t' of
+                Token ASSIGN _ -> logMsgLn "-- parsing Assignment" >> parseExpression
+                Token tt _ -> compError ("Unexpected token: " ++ show tt ++ "\nExpected an ASSIGNment operator")
+        Token WRITE _ -> do
             logMsgLn "-- parsing Write statement"
-            parseExpression ts'
-        t@(Token BEGIN _):ts' -> do
-            logTerminal t ts'
+            parseExpression
+        Token BEGIN _ -> do
             logMsgLn "-- parsing Block statement"
-            parseStatementList ts'
-        [] -> compError "Expecting more tokens to parse a Statement"
-        t@(Token tt _):_ -> parseError ("Unexpected token: " ++ show tt) t
+            parseStatementList
+        Token tt _ -> parseError ("Unexpected token: " ++ show tt) t
+        EOF -> compError "Expecting more tokens to parse a Statement"
     logMsgLn "Found a Statement"
     return stmt
 
-parseStatementList :: [Token] -> Parser [Token]
-parseStatementList ts = logMsgLn "Looking for Sub-Statements" >> case ts of
-    Token END _:ts' -> do
-        logMsgLn "-- found end of Block statement"
-        return ts'
-    _ -> do
-        stmt <- parseStatement ts
-        logMsgLn "Statement is a Sub-Statement"
-        eatTerminal SEMICOLON stmt >>= parseStatementList
+parseStatementList :: Parser [Token]
+parseStatementList =  do
+    logMsgLn "Looking for Sub-Statements"
+    t <- peekToken
+    case t of
+        Token END _ -> do
+            logMsgLn "-- found end of Block statement"
+            popToken
+            getTokens
+        _ -> do
+            stmt <- parseStatement
+            logMsgLn "Statement is a Sub-Statement"
+            eatTerminal SEMICOLON >> parseStatementList
 
-parseExpression :: [Token] -> Parser [Token]
-parseExpression [] = compError "Expecting more tokens to parse expression"
-parseExpression ts = do
+parseExpression :: Parser [Token]
+parseExpression = do
     logMsgLn "Looking for an Expression"
-    parseSubExpression ts
+    parseSubExpression
     where
-        parseSubExpression :: [Token] -> Parser [Token]
-        parseSubExpression ts = do
+        parseSubExpression :: Parser [Token]
+        parseSubExpression = do
             logMsgLn "-- looking for a Subexpression"
-            parseTerm ts >>= eatAddOp
-        parseTerm :: [Token] -> Parser [Token]
-        parseTerm ts = do
+            parseTerm >> eatAddOp
+        parseTerm :: Parser [Token]
+        parseTerm = do
             logMsgLn "-- looking for a Term"
-            parseFactor ts >>= eatMulOp
-        parseFactor :: [Token] -> Parser [Token]
-        parseFactor ts = do
+            parseFactor >> eatMulOp
+        parseFactor :: Parser [Token]
+        parseFactor = do
             logMsgLn "-- looking for a factor"
-            ts' <- case ts of
-                t1@(Token SUB _):t2@(Token (NUM _)_):ts' -> do
-                    logTerminal t1 (t2:ts')
-                    logTerminal t2 ts'
-                    return ts'
-                t@(Token LPAR _):ts' -> parseExpression ts' >>= eatTerminal RPAR
-                t@(Token (ID _) _):ts' -> return ts'
-                t@(Token (NUM _) _):ts' -> return ts'
-                t@(Token tt _):ts'-> parseError ("Unexpected token: " ++ show tt) t
-                [] -> logError "Expecting more tokens to parse expression"
+            t <- popToken
+            ts <- getTokens
+            ts' <- case t of
+                Token SUB _ -> do
+                    logTerminal t ts
+                    t' <- popToken
+                    ts' <- getTokens
+                    logTerminal t' ts'
+                    case t' of
+                        Token (NUM _) _ -> return ts'
+                        _ -> parseError ("Expecting to fint NUM, got " ++ show t' ++ " instead") t'
+                Token LPAR _ -> parseExpression >> eatTerminal RPAR
+                Token (ID _) _ -> return ts
+                Token (NUM _) _ -> return ts
+                _ -> parseError ("Unexpected " ++ show t) t
             logMsgLn "-- found factor"
             return ts'
-        eatAddOp :: [Token] -> Parser [Token]
-        eatAddOp (t:ts') = logTerminal t ts' >> case t of
-            Token ADD _ -> parseExpression ts'
-            Token SUB _ -> parseExpression ts'
-            _           -> logMsgLn "---- Not part of Expression grammar: IGNORING" >> return (t:ts')
-        eatAddOp ts' = return ts'
-        eatMulOp :: [Token] -> Parser [Token]
-        eatMulOp (t:ts') = logTerminal t ts' >> case t of
-            Token MUL _ -> parseTerm ts'
-            Token DIV _ -> parseTerm ts'
-            _           -> logMsgLn "---- Not part of Expression grammar: IGNORING" >> return (t:ts')
-        eatMulOp ts' = return ts'
+        eatAddOp :: Parser [Token]
+        eatAddOp = do
+            t <- peekToken
+            case t of
+                Token ADD _ -> popToken >> parseExpression
+                Token SUB _ -> popToken >> parseExpression
+                _           -> logMsgLn "---- Not part of Expression grammar: IGNORING" >> getTokens
+        eatMulOp :: Parser [Token]
+        eatMulOp = do
+            t <- peekToken
+            case t of
+                Token MUL _ -> popToken >> parseTerm
+                Token DIV _ -> popToken >> parseTerm
+                _           -> logMsgLn "---- Not part of Expression grammar: IGNORING" >> getTokens

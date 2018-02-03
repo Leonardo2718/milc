@@ -101,7 +101,7 @@ doCompilation :: CompilerEnvironment -> CompilerMonad [Token]
 doCompilation env = do
     logMsgLn $ concat ["======= Compiling ", source , " ======="]
     ts <- scan env . envSource $ env
-    ts' <- parse ts
+    ts' <- parse env ts
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"
     return ts'
     where
