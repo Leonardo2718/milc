@@ -107,11 +107,27 @@ factor -> LPAR expr RPAR
 -}
 
 import Data.List
+import Control.Monad.State
 
 import CompilerEnvironment
 import MLexer
 
-parseError :: String -> Token -> CompilerMonad a
+data ParserState = ParserState {lastToken :: Token}
+type ParserStateMonad = State ParserState
+type Parser a = CompilerMonadT a ParserStateMonad
+
+runParser :: Parser a -> CompilerMonad (a, ParserState)
+runParser p = do
+    let (c, s) = runState (runCompilerT p) (ParserState EOF)
+    a <- compiler c
+    return (a, s)
+
+setLastToken :: Token -> Parser ()
+setLastToken t = do
+    s <- get
+    put (s{lastToken=t})
+
+parseError :: String -> Token -> Parser a
 parseError mkmsg t@(Token _ pos@(AlexPn _ l c)) = logError msg where
     msg = concat $ ["Parsing error at ", showAlexPos pos, ": ", mkmsg]
 
@@ -136,12 +152,12 @@ data Expression = Add Expression Expression
                 | Id String
                 | Num Int
 
-logTerminal :: Token -> [Token] -> CompilerMonad ()
+logTerminal :: Token -> [Token] -> Parser ()
 logTerminal t ts = do
     logMsgLn ("-- found terminal: " ++ show t)
     logMsgLn ("   remaining tokens: " ++ showFirst 4 ts)
 
-eatTerminal :: TokenType -> [Token] -> CompilerMonad [Token]
+eatTerminal :: TokenType -> [Token] -> Parser [Token]
 eatTerminal tt ts = case ts of
     [] -> compError ("Expecting to find " ++ show tt)
     t@(Token tt' _):ts' -> if tt == tt'
@@ -154,9 +170,10 @@ eatTerminal tt ts = case ts of
 parse :: [Token] -> CompilerMonad [Token]
 parse ts = do
     logMsgLn "=== Running parser ==="
-    parseStatement ts
+    (ts', _) <- runParser (parseStatement ts)
+    return ts'
 
-parseStatement :: [Token] -> CompilerMonad [Token]
+parseStatement :: [Token] -> Parser [Token]
 parseStatement ts = do
     logMsgLn "Looking for a Statement"
     stmt <- case ts of
@@ -191,7 +208,7 @@ parseStatement ts = do
     logMsgLn "Found a Statement"
     return stmt
 
-parseStatementList :: [Token] -> CompilerMonad [Token]
+parseStatementList :: [Token] -> Parser [Token]
 parseStatementList ts = logMsgLn "Looking for Sub-Statements" >> case ts of
     Token END _:ts' -> do
         logMsgLn "-- found end of Block statement"
@@ -201,19 +218,21 @@ parseStatementList ts = logMsgLn "Looking for Sub-Statements" >> case ts of
         logMsgLn "Statement is a Sub-Statement"
         eatTerminal SEMICOLON stmt >>= parseStatementList
 
-parseExpression :: [Token] -> CompilerMonad [Token]
+parseExpression :: [Token] -> Parser [Token]
 parseExpression [] = compError "Expecting more tokens to parse expression"
 parseExpression ts = do
     logMsgLn "Looking for an Expression"
     parseSubExpression ts
     where
-        parseSubExpression :: [Token] -> CompilerMonad [Token]
+        parseSubExpression :: [Token] -> Parser [Token]
         parseSubExpression ts = do
             logMsgLn "-- looking for a Subexpression"
             parseTerm ts >>= eatAddOp
+        parseTerm :: [Token] -> Parser [Token]
         parseTerm ts = do
             logMsgLn "-- looking for a Term"
             parseFactor ts >>= eatMulOp
+        parseFactor :: [Token] -> Parser [Token]
         parseFactor ts = do
             logMsgLn "-- looking for a factor"
             ts' <- case ts of
@@ -228,11 +247,13 @@ parseExpression ts = do
                 [] -> logError "Expecting more tokens to parse expression"
             logMsgLn "-- found factor"
             return ts'
+        eatAddOp :: [Token] -> Parser [Token]
         eatAddOp (t:ts') = logTerminal t ts' >> case t of
             Token ADD _ -> parseExpression ts'
             Token SUB _ -> parseExpression ts'
             _           -> logMsgLn "---- Not part of Expression grammar: IGNORING" >> return (t:ts')
         eatAddOp ts' = return ts'
+        eatMulOp :: [Token] -> Parser [Token]
         eatMulOp (t:ts') = logTerminal t ts' >> case t of
             Token MUL _ -> parseTerm ts'
             Token DIV _ -> parseTerm ts'
