@@ -214,7 +214,7 @@ scan :: CompilerEnvironment -> String -> CompilerMonad [Token]
 scan env str = do
     logMsgLn "=== Running lexical analysis ==="
     ts <- rewrap $ runAlex str (setCompilerEnvironment env >> collectTokens)
-    logMsgLn "Lexical analysis succeeded"
+    logMsgLn "Lexical analysis successful"
     logMsgLn $ concat ["Tokens: ", show ts]
     return ts
     where

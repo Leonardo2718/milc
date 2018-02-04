@@ -164,8 +164,33 @@ parseError mkmsg = do
     t <- getLastParsedToken
     case t of
         Token _ pos@(AlexPn _ l c) -> logError (concat ["Parsing error at ", showAlexPos pos, ": ", mkmsg, "\n"
-                                                   , showErrorLocation (envSource env) l c])
+                                                       , showErrorLocation (envSource env) l c])
         EOF -> logError ("Parsing error: " ++ mkmsg)
+
+expectationError :: String -> String -> Parser a
+expectationError expected actual = parseError $ concat ["Expecting ", expected, " but got ", actual, ":"]
+
+wrongTokenError :: TokenType -> TokenType -> Parser a
+wrongTokenError expected actual = expectationError (show expected) (show actual)
+
+wrongTokenError' :: String -> TokenType -> Parser a
+wrongTokenError' expected actual = expectationError expected (show actual)
+
+missingExpectedTokenError :: TokenType -> Parser a
+missingExpectedTokenError expected = do
+    lastToken <- getLastParsedToken
+    let more = case lastToken of
+            EOF -> ""
+            Token _ p -> " after " ++ showAlexPos p
+    expectationError (show expected) ("nothing" ++ more)
+
+missingTokenError :: Parser a
+missingTokenError = do
+    lastToken <- getLastParsedToken
+    let more = case lastToken of
+            EOF -> ""
+            Token _ p -> " after " ++ showAlexPos p
+    expectationError "a Token" ("nothing" ++ more)
 
 showFirst :: Show a => Int -> [a] -> String
 showFirst n l = if length l > n
@@ -260,7 +285,7 @@ popToken :: Parser Token
 popToken = do
     ts <- getTokens
     case ts of
-        [] -> return EOF
+        [] -> missingTokenError
         t:ts' -> do
             setTokens ts'
             setLastParsedToken t
@@ -274,16 +299,15 @@ eatToken tt = do
     case t of
         Token tt' _ -> if tt == tt'
             then popToken >> logMsgLn "-- eating popped token" >> return ()
-            else parseError (concat ["Expecting ", show tt, ", got ", show t, " instead"])
-        _ -> parseError (concat ["Expecting ", show tt, ", got ", show t, " instead"])
+            else wrongTokenError tt tt'
+        EOF -> missingExpectedTokenError tt
 
 parse :: CompilerEnvironment -> [Token] -> CompilerMonad (AST, ParserState)
 parse env ts = do
     logMsgLn "=== Running parser ==="
     p <- runParser env parseProgram ts
-    logMsgLn "Parsing succeeded"
+    logMsgLn "Parsing successful"
     return p
-    -- return $ remainingTokens s
 
 parseProgram :: Parser AST
 parseProgram = do
@@ -314,7 +338,7 @@ parseStatement = do
             t' <- popToken
             case t' of
                 Token (ID n) _ -> logMsgLn "-- parsing Input statement" >> return (Input n p)
-                Token tt _ -> parseError ("Unexpected token: " ++ show tt ++ "\nExpected an ID")
+                Token tt _ -> wrongTokenError' "ID" tt
         Token (ID n) p -> do
             eatToken ASSIGN
             logMsgLn "-- parsing Assignment"
@@ -328,8 +352,7 @@ parseStatement = do
             logMsgLn "-- parsing Block statement"
             ss <- parseStatementList []
             return $ Block ss p
-        Token tt _ -> parseError ("Unexpected token: " ++ show tt)
-        EOF -> parseError "Expecting more tokens to parse a Statement"
+        Token tt _ -> wrongTokenError' "one of IF, WHILE, INPUT, ID, WRITE, or BEGIN" tt
     logMsgLn $ "Found " ++ nameOf s ++ " statement"
     logTree s
     return s
@@ -380,14 +403,14 @@ parseExpression = do
                     t' <- popToken
                     case t' of
                         Token (NUM v) _ -> return $ Num (-v) p
-                        _ -> parseError ("Expecting to fint NUM, got " ++ show t' ++ " instead")
+                        Token t' _ -> wrongTokenError' "NUM" t'
                 Token LPAR _ -> do
                     e <- parseSubExpression
                     eatToken RPAR
                     return e
                 Token (ID n) p -> return $ Id n p
                 Token (NUM v) p -> return $ Num v p
-                _ -> parseError ("Unexpected " ++ show t)
+                Token t' _ -> wrongTokenError' "one of SUB, LPAR, ID, or NUM" t'
             logMsgLn "-- found Factor"
             return e
         eatAddOp :: Expression -> Parser Expression
@@ -404,7 +427,7 @@ parseExpression = do
                     e2 <- parseSubExpression
                     return $ Sub e1 e2 p
                 _           -> do
-                    logMsgLn "---- Not part of Expression grammar: IGNORING"
+                    logMsgLn "----- Not part of Expression grammar: IGNORING"
                     return e1
         eatMulOp :: Expression -> Parser Expression
         eatMulOp e1 = do
@@ -420,5 +443,5 @@ parseExpression = do
                     e2 <- parseTerm
                     return $ Div e1 e2 p
                 _           -> do
-                    logMsgLn "---- Not part of Expression grammar: IGNORING"
+                    logMsgLn "----- Not part of Expression grammar: IGNORING"
                     return e1
