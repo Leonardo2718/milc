@@ -97,20 +97,20 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 -- main program ----------------------------------------------------------------
 
 -- define steps of a compilation
-doCompilation :: CompilerEnvironment -> CompilerMonad [Token]
+doCompilation :: CompilerEnvironment -> CompilerMonad [AST]
 doCompilation env = do
     logMsgLn $ concat ["======= Compiling ", source , " ======="]
     ts <- scan env . envSource $ env
-    ts' <- parse env ts
+    (ast, _) <- parse env ts
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"
-    return ts'
+    return [ast]
     where
         source = case envSourceFile env of
             "" -> "standard input"
             f -> f
 
 -- run the different stages of the compiler (currently only lexer)
-compile :: CompilerEnvironment -> CompilerMonad [Token]
+compile :: CompilerEnvironment -> CompilerMonad [AST]
 compile env = (doCompilation env) `catchCompError` handleCompError where
     handleCompError e = logError . concat $ ["\nCOMPILATION ERROR", atLocation, ":\n", e, "\n"]
     atLocation = case envSourceFile env of
@@ -118,13 +118,13 @@ compile env = (doCompilation env) `catchCompError` handleCompError where
         f  -> " in " ++ f
 
 -- compile a file (argument is path to the file)
-compileFile :: String -> IO (CompilerMonad [Token])
+compileFile :: String -> IO (CompilerMonad [AST])
 compileFile f = do
     s <- readFile f
     return $ compile CompilerEnvironment {envSource = s, envSourceFile = f}
 
 -- compile multiple files, merging their compilation output together
-compileFiles :: [String] -> IO (CompilerMonad [Token])
+compileFiles :: [String] -> IO (CompilerMonad [AST])
 compileFiles [f] = compileFile f
 compileFiles (f:fs) = do
     c <- compileFile f
@@ -132,7 +132,7 @@ compileFiles (f:fs) = do
     return $ mergeCompilers c cs
 
 -- compile source from standard input
-compileStdIn :: IO (CompilerMonad [Token])
+compileStdIn :: IO (CompilerMonad [AST])
 compileStdIn = do
     s <- getContents
     return . compile $ CompilerEnvironment {envSource = s, envSourceFile = ""}

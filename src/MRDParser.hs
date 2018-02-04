@@ -174,13 +174,18 @@ showFirst n l = if length l > n
     where
         firsts = take n l
 
-class AST a where
+class AbstractSyntaxTree a where
     nameOf :: a -> String
     positionOf :: a -> AlexPosn
     showSubTrees :: String -> a -> [String]
     showTree :: String -> a -> String
     showTree lead ast = intercalate "\n" (showAllTrees lead ast) where
-        showAllTrees l t = let l' = ' ':' ':l in concat [l, nameOf t, "\t\t(", showAlexPos (positionOf t), ")"] : showSubTrees l' t
+        showAllTrees l t = concat [l, name, posPadding, "(", showAlexPos (positionOf t), ")"] : showSubTrees l' t where
+            name = nameOf t
+            posPadding = take (20 - length name) (repeat ' ')
+            l' = ' ':' ':l
+
+data AST = AST String Statement
 
 data Statement = IfThenElse {stmtExpr :: Expression, thenBranch :: Statement, elseBranch :: Statement, stmtPos :: AlexPosn}
                | WhileDo {stmtExpr :: Expression, doStmt :: Statement, stmtPos :: AlexPosn}
@@ -195,11 +200,16 @@ data Expression = Add { subExprL :: Expression, subExprR :: Expression, exprPos 
                 | Id { idName :: String, exprPos :: AlexPosn}
                 | Num { numValue :: Int, exprPos :: AlexPosn} deriving (Eq)
 
-instance AST Statement where
+instance AbstractSyntaxTree AST where
+    nameOf (AST f _) = "AST " ++ f ++ " "
+    positionOf (AST _ s) = positionOf s
+    showSubTrees l (AST _ s) = [showTree l s]
+
+instance AbstractSyntaxTree Statement where
     nameOf (IfThenElse _ _ _ _) = "IfThenElse"
     nameOf (WhileDo _ _ _)      = "WhileDo"
-    nameOf (Input n _)          = "Input " ++ n
-    nameOf (Assign n _ _)       = "Assign " ++ n
+    nameOf (Input n _)          = "Input " ++ show n
+    nameOf (Assign n _ _)       = "Assign " ++ show n
     nameOf (Write _ _)          = "Write"
     nameOf (Block _ _)          = "Block"
     positionOf                  = stmtPos
@@ -210,20 +220,32 @@ instance AST Statement where
     showSubTrees l (Write e _)              = [showTree l e]
     showSubTrees l (Block ss _)             = map (showTree l) ss
 
-instance AST Expression where
+instance AbstractSyntaxTree Expression where
     nameOf (Add _ _ _)  = "Add"
     nameOf (Sub _ _ _)  = "Sub"
     nameOf (Mul _ _ _)  = "Mul"
     nameOf (Div _ _ _)  = "Div"
-    nameOf (Id n _)     = "Id " ++ n
+    nameOf (Id n _)     = "Id " ++ show n
     nameOf (Num v _)    = "Num " ++ show v
     positionOf          = exprPos
     showSubTrees l (Id _ _) = []
     showSubTrees l (Num _ _)= []
     showSubTrees l e        = [showTree l (subExprL e), showTree l (subExprR e)]
 
+instance Show AST where
+    show = showTree ""
+
+instance Show Statement where
+    show = showTree ""
+
 instance Show Expression where
-    show e = showTree "" e
+    show = showTree ""
+
+logTree :: AbstractSyntaxTree t => t -> Parser ()
+logTree t = do
+    logMsgLn "--------------------------------------------------"
+    logMsgLn $ showTree "" t
+    logMsgLn "--------------------------------------------------"
 
 peekToken :: Parser Token
 peekToken = do
@@ -251,80 +273,107 @@ eatToken tt = do
     t <- peekToken
     case t of
         Token tt' _ -> if tt == tt'
-            then popToken >> return ()
+            then popToken >> logMsgLn "-- eating popped token" >> return ()
             else parseError (concat ["Expecting ", show tt, ", got ", show t, " instead"])
         _ -> parseError (concat ["Expecting ", show tt, ", got ", show t, " instead"])
 
-parse :: CompilerEnvironment -> [Token] -> CompilerMonad [Token]
+parse :: CompilerEnvironment -> [Token] -> CompilerMonad (AST, ParserState)
 parse env ts = do
     logMsgLn "=== Running parser ==="
-    (_, s) <- runParser env parseStatement ts
-    return $ remainingTokens s
+    p <- runParser env parseProgram ts
+    logMsgLn "Parsing succeeded"
+    return p
+    -- return $ remainingTokens s
 
-parseStatement :: Parser ()
+parseProgram :: Parser AST
+parseProgram = do
+    stmt <- parseStatement
+    env <- getEnv
+    return $ AST (envSourceFile env) stmt
+
+parseStatement :: Parser Statement
 parseStatement = do
     logMsgLn "Looking for a Statement"
     t <- popToken
-    case t of
-        Token IF _ -> do
+    s <- case t of
+        Token IF p -> do
             logMsgLn "-- parsing If Then Else statement"
-            parseExpression >> eatToken THEN >> parseStatement >> eatToken ELSE >> parseStatement
-        Token WHILE _ -> do
+            expr <- parseExpression
+            eatToken THEN
+            thenStmt <- parseStatement
+            eatToken ELSE
+            elseStmt <- parseStatement
+            return $ IfThenElse expr thenStmt elseStmt p
+        Token WHILE p -> do
             logMsgLn "-- parsing While Do statement"
-            parseExpression >> eatToken DO >> parseStatement
-        Token INPUT _ -> do
+            expr <- parseExpression
+            eatToken DO
+            stmt <- parseStatement
+            return $ WhileDo expr stmt p
+        Token INPUT p -> do
             t' <- popToken
             case t' of
-                Token (ID _) _ -> logMsgLn "-- parsing Input statement" >> return ()
+                Token (ID n) _ -> logMsgLn "-- parsing Input statement" >> return (Input n p)
                 Token tt _ -> parseError ("Unexpected token: " ++ show tt ++ "\nExpected an ID")
-        Token (ID _) _ -> do
+        Token (ID n) p -> do
             eatToken ASSIGN
             logMsgLn "-- parsing Assignment"
-            parseExpression
-        Token WRITE _ -> do
+            e <- parseExpression
+            return $ Assign n e p
+        Token WRITE p -> do
             logMsgLn "-- parsing Write statement"
-            parseExpression
-        Token BEGIN _ -> do
+            e <- parseExpression
+            return $ Write e p
+        Token BEGIN p -> do
             logMsgLn "-- parsing Block statement"
-            parseStatementList
+            ss <- parseStatementList []
+            return $ Block ss p
         Token tt _ -> parseError ("Unexpected token: " ++ show tt)
         EOF -> parseError "Expecting more tokens to parse a Statement"
-    logMsgLn "Found a Statement"
+    logMsgLn $ "Found " ++ nameOf s ++ " statement"
+    logTree s
+    return s
 
-parseStatementList :: Parser ()
-parseStatementList =  do
-    logMsgLn "Looking for Sub-Statements"
+parseStatementList :: [Statement] -> Parser [Statement]
+parseStatementList ss =  do
+    logMsgLn "Inside Block statement"
     t <- peekToken
     case t of
         Token END _ -> do
-            logMsgLn "-- found end of Block statement"
+            logMsgLn "Found end of Block statement"
             popToken
-            return ()
+            return ss
         _ -> do
+            logMsgLn "Looking for Sub-Statements"
             stmt <- parseStatement
             logMsgLn "Statement is a Sub-Statement"
             eatToken SEMICOLON
-            parseStatementList
+            parseStatementList (ss ++ [stmt])
 
-parseExpression :: Parser ()
+parseExpression :: Parser Expression
 parseExpression = do
     logMsgLn "Looking for an Expression"
     e <- parseSubExpression
-    logMsgLn "Found Expression:"
-    logMsgLn $ showTree "  " e
-    return ()
+    logMsgLn "Found Expression"
+    logTree e
+    return e
     where
         parseSubExpression :: Parser Expression
         parseSubExpression = do
             logMsgLn "-- looking for a Subexpression"
-            parseTerm >>= eatAddOp
+            e <- parseTerm >>= eatAddOp
+            logMsgLn "-- found Subexpression:"
+            logTree e
+            return e
         parseTerm :: Parser Expression
         parseTerm = do
             logMsgLn "-- looking for a Term"
-            parseFactor >>= eatMulOp
+            e <- parseFactor >>= eatMulOp
+            logMsgLn "-- found Term"
+            return e
         parseFactor :: Parser Expression
         parseFactor = do
-            logMsgLn "-- looking for a factor"
+            logMsgLn "-- looking for a Factor"
             t <- popToken
             e <- case t of
                 Token SUB p -> do
@@ -339,10 +388,11 @@ parseExpression = do
                 Token (ID n) p -> return $ Id n p
                 Token (NUM v) p -> return $ Num v p
                 _ -> parseError ("Unexpected " ++ show t)
-            logMsgLn "-- found factor"
+            logMsgLn "-- found Factor"
             return e
         eatAddOp :: Expression -> Parser Expression
         eatAddOp e1 = do
+            logMsgLn "-- looking for Add/Sub"
             t <- peekToken
             case t of
                 Token ADD p -> do
@@ -358,6 +408,7 @@ parseExpression = do
                     return e1
         eatMulOp :: Expression -> Parser Expression
         eatMulOp e1 = do
+            logMsgLn "-- looking for Mul/Div"
             t <- peekToken
             case t of
                 Token MUL p -> do
