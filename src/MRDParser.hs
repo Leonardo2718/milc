@@ -174,12 +174,19 @@ showFirst n l = if length l > n
     where
         firsts = take n l
 
-data AST = AST Statement
+class AST a where
+    nameOf :: a -> String
+    positionOf :: a -> AlexPosn
+    showSubTrees :: String -> a -> [String]
+    showTree :: String -> a -> String
+    showTree lead ast = intercalate "\n" (showAllTrees lead ast) where
+        showAllTrees l t = let l' = ' ':' ':l in concat [l, nameOf t, "\t\t(", showAlexPos (positionOf t), ")"] : showSubTrees l' t
+
 data Statement = IfThenElse {stmtExpr :: Expression, thenBranch :: Statement, elseBranch :: Statement, stmtPos :: AlexPosn}
                | WhileDo {stmtExpr :: Expression, doStmt :: Statement, stmtPos :: AlexPosn}
                | Input {destID :: String, stmtPos :: AlexPosn}
                | Assign {destID :: String, stmtExpr :: Expression, stmtPos :: AlexPosn}
-               | Write {sourceID :: String, stmtPos :: AlexPosn}
+               | Write {writeExpr :: Expression, stmtPos :: AlexPosn}
                | Block {statements :: [Statement], stmtPos :: AlexPosn} deriving (Eq)
 data Expression = Add { subExprL :: Expression, subExprR :: Expression, exprPos :: AlexPosn}
                 | Sub { subExprL :: Expression, subExprR :: Expression, exprPos :: AlexPosn}
@@ -188,18 +195,35 @@ data Expression = Add { subExprL :: Expression, subExprR :: Expression, exprPos 
                 | Id { idName :: String, exprPos :: AlexPosn}
                 | Num { numValue :: Int, exprPos :: AlexPosn} deriving (Eq)
 
-showExpr :: String -> Expression -> String
-showExpr lead expr = intercalate "\n" (showSubExpr lead expr) where
-    showSubExpr l e = case e of
-        Add e1 e2 p -> concat [l, "Add\t\t(", showAlexPos p, ")"] : (showSubExpr (' ':' ':l) e1 ++ showSubExpr (' ':' ':l) e2)
-        Sub e1 e2 p -> concat [l, "Sub\t\t(", showAlexPos p, ")"] : (showSubExpr (' ':' ':l) e1 ++ showSubExpr (' ':' ':l) e2)
-        Mul e1 e2 p -> concat [l, "Mul\t\t(", showAlexPos p, ")"] : (showSubExpr (' ':' ':l) e1 ++ showSubExpr (' ':' ':l) e2)
-        Div e1 e2 p -> concat [l, "Div\t\t(", showAlexPos p, ")"] : (showSubExpr (' ':' ':l) e1 ++ showSubExpr (' ':' ':l) e2)
-        Id n p      -> [concat [l, "Id ", n, "\t\t(", showAlexPos p, ")"]]
-        Num v p     -> [concat [l, "Num ", show v, "\t\t(", showAlexPos p, ")"]]
+instance AST Statement where
+    nameOf (IfThenElse _ _ _ _) = "IfThenElse"
+    nameOf (WhileDo _ _ _)      = "WhileDo"
+    nameOf (Input n _)          = "Input " ++ n
+    nameOf (Assign n _ _)       = "Assign " ++ n
+    nameOf (Write _ _)          = "Write"
+    nameOf (Block _ _)          = "Block"
+    positionOf                  = stmtPos
+    showSubTrees l (IfThenElse e th el _)   = [showTree l e, showTree l th, showTree l el]
+    showSubTrees l (WhileDo e s _)          = [showTree l e, showTree l s]
+    showSubTrees l (Input _ _)              = []
+    showSubTrees l (Assign _ e _)           = [showTree l e]
+    showSubTrees l (Write e _)              = [showTree l e]
+    showSubTrees l (Block ss _)             = map (showTree l) ss
+
+instance AST Expression where
+    nameOf (Add _ _ _)  = "Add"
+    nameOf (Sub _ _ _)  = "Sub"
+    nameOf (Mul _ _ _)  = "Mul"
+    nameOf (Div _ _ _)  = "Div"
+    nameOf (Id n _)     = "Id " ++ n
+    nameOf (Num v _)    = "Num " ++ show v
+    positionOf          = exprPos
+    showSubTrees l (Id _ _) = []
+    showSubTrees l (Num _ _)= []
+    showSubTrees l e        = [showTree l (subExprL e), showTree l (subExprR e)]
 
 instance Show Expression where
-    show e = showExpr "" e
+    show e = showTree "" e
 
 peekToken :: Parser Token
 peekToken = do
@@ -287,7 +311,7 @@ parseExpression = do
     logMsgLn "Looking for an Expression"
     e <- parseSubExpression
     logMsgLn "Found Expression:"
-    logMsgLn $ showExpr "  " e
+    logMsgLn $ showTree "  " e
     return ()
     where
         parseSubExpression :: Parser Expression
