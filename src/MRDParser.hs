@@ -158,12 +158,14 @@ runParser env p ts = do
     a <- compiler c
     return (a, s)
 
-parseError :: String -> Token -> Parser a
-parseError mkmsg t@(Token _ pos@(AlexPn _ l c)) = do
-    -- env <- getEnv
-    let msg = concat $ ["Parsing error at ", showAlexPos pos, ": ", mkmsg]--, "\n"
-                       --, showErrorLocation (envSource env) l c]
-    logError msg
+parseError :: String -> Parser a
+parseError mkmsg = do
+    env <- getEnv
+    t <- getLastParsedToken
+    case t of
+        Token _ pos@(AlexPn _ l c) -> logError (concat ["Parsing error at ", showAlexPos pos, ": ", mkmsg, "\n"
+                                                   , showErrorLocation (envSource env) l c])
+        EOF -> logError ("Parsing error: " ++ mkmsg)
 
 showFirst :: Show a => Int -> [a] -> String
 showFirst n l = if length l > n
@@ -212,60 +214,52 @@ popToken = do
             logMsgLn ("   remaining tokens: " ++ showFirst 4 ts')
             return t
 
-eatTerminal :: TokenType -> Parser [Token]
-eatTerminal tt = do
-    t <- popToken
+eatToken :: TokenType -> Parser ()
+eatToken tt = do
+    t <- peekToken
     case t of
         Token tt' _ -> if tt == tt'
-            then do
-                -- logMsgLn ("-- eating terminal: " ++ show t)
-                ts <- getTokens
-                -- logMsgLn ("   remaining tokens: " ++ showFirst 4 ts)
-                return ts
-            else parseError (concat ["Missing ", show tt, " token"]) t
-        _ -> parseError ("Expecting to find " ++ show tt ++", got " ++ show t ++ " instead") t
+            then popToken >> return ()
+            else parseError (concat ["Expecting ", show tt, ", got ", show t, " instead"])
+        _ -> parseError (concat ["Expecting ", show tt, ", got ", show t, " instead"])
 
 parse :: CompilerEnvironment -> [Token] -> CompilerMonad [Token]
 parse env ts = do
     logMsgLn "=== Running parser ==="
-    (ts', _) <- runParser env parseStatement ts
-    return ts'
+    (_, s) <- runParser env parseStatement ts
+    return $ remainingTokens s
 
-parseStatement :: Parser [Token]
+parseStatement :: Parser ()
 parseStatement = do
     logMsgLn "Looking for a Statement"
     t <- popToken
-    stmt <- case t of
+    case t of
         Token IF _ -> do
             logMsgLn "-- parsing If Then Else statement"
-            parseExpression >> eatTerminal THEN >> parseStatement >> eatTerminal ELSE >> parseStatement
+            parseExpression >> eatToken THEN >> parseStatement >> eatToken ELSE >> parseStatement
         Token WHILE _ -> do
             logMsgLn "-- parsing While Do statement"
-            parseExpression >> eatTerminal DO >> parseStatement
+            parseExpression >> eatToken DO >> parseStatement
         Token INPUT _ -> do
             t' <- popToken
-            ts' <- getTokens
             case t' of
-                Token (ID _) _ -> logMsgLn "-- parsing Input statement" >> return ts'
-                Token tt _ -> parseError ("Unexpected token: " ++ show tt ++ "\nExpected an ID") t'
+                Token (ID _) _ -> logMsgLn "-- parsing Input statement" >> return ()
+                Token tt _ -> parseError ("Unexpected token: " ++ show tt ++ "\nExpected an ID")
         Token (ID _) _ -> do
-            t' <- popToken
-            ts' <- getTokens
-            case t' of
-                Token ASSIGN _ -> logMsgLn "-- parsing Assignment" >> parseExpression
-                Token tt _ -> compError ("Unexpected token: " ++ show tt ++ "\nExpected an ASSIGNment operator")
+            eatToken ASSIGN
+            logMsgLn "-- parsing Assignment"
+            parseExpression
         Token WRITE _ -> do
             logMsgLn "-- parsing Write statement"
             parseExpression
         Token BEGIN _ -> do
             logMsgLn "-- parsing Block statement"
             parseStatementList
-        Token tt _ -> parseError ("Unexpected token: " ++ show tt) t
-        EOF -> compError "Expecting more tokens to parse a Statement"
+        Token tt _ -> parseError ("Unexpected token: " ++ show tt)
+        EOF -> parseError "Expecting more tokens to parse a Statement"
     logMsgLn "Found a Statement"
-    return stmt
 
-parseStatementList :: Parser [Token]
+parseStatementList :: Parser ()
 parseStatementList =  do
     logMsgLn "Looking for Sub-Statements"
     t <- peekToken
@@ -273,56 +267,52 @@ parseStatementList =  do
         Token END _ -> do
             logMsgLn "-- found end of Block statement"
             popToken
-            getTokens
+            return ()
         _ -> do
             stmt <- parseStatement
             logMsgLn "Statement is a Sub-Statement"
-            eatTerminal SEMICOLON >> parseStatementList
+            eatToken SEMICOLON
+            parseStatementList
 
-parseExpression :: Parser [Token]
+parseExpression :: Parser ()
 parseExpression = do
     logMsgLn "Looking for an Expression"
     parseSubExpression
     where
-        parseSubExpression :: Parser [Token]
+        parseSubExpression :: Parser ()
         parseSubExpression = do
             logMsgLn "-- looking for a Subexpression"
             parseTerm >> eatAddOp
-        parseTerm :: Parser [Token]
+        parseTerm :: Parser ()
         parseTerm = do
             logMsgLn "-- looking for a Term"
             parseFactor >> eatMulOp
-        parseFactor :: Parser [Token]
+        parseFactor :: Parser ()
         parseFactor = do
             logMsgLn "-- looking for a factor"
             t <- popToken
-            ts <- getTokens
-            ts' <- case t of
+            case t of
                 Token SUB _ -> do
-                    logTerminal t ts
                     t' <- popToken
-                    ts' <- getTokens
-                    logTerminal t' ts'
                     case t' of
-                        Token (NUM _) _ -> return ts'
-                        _ -> parseError ("Expecting to fint NUM, got " ++ show t' ++ " instead") t'
-                Token LPAR _ -> parseExpression >> eatTerminal RPAR
-                Token (ID _) _ -> return ts
-                Token (NUM _) _ -> return ts
-                _ -> parseError ("Unexpected " ++ show t) t
+                        Token (NUM _) _ -> return ()
+                        _ -> parseError ("Expecting to fint NUM, got " ++ show t' ++ " instead")
+                Token LPAR _ -> parseExpression >> eatToken RPAR
+                Token (ID _) _ -> return ()
+                Token (NUM _) _ -> return ()
+                _ -> parseError ("Unexpected " ++ show t)
             logMsgLn "-- found factor"
-            return ts'
-        eatAddOp :: Parser [Token]
+        eatAddOp :: Parser ()
         eatAddOp = do
             t <- peekToken
             case t of
                 Token ADD _ -> popToken >> parseExpression
                 Token SUB _ -> popToken >> parseExpression
-                _           -> logMsgLn "---- Not part of Expression grammar: IGNORING" >> getTokens
-        eatMulOp :: Parser [Token]
+                _           -> logMsgLn "---- Not part of Expression grammar: IGNORING"
+        eatMulOp :: Parser ()
         eatMulOp = do
             t <- peekToken
             case t of
                 Token MUL _ -> popToken >> parseTerm
                 Token DIV _ -> popToken >> parseTerm
-                _           -> logMsgLn "---- Not part of Expression grammar: IGNORING" >> getTokens
+                _           -> logMsgLn "---- Not part of Expression grammar: IGNORING"

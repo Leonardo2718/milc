@@ -97,7 +97,7 @@ catchCompError = catchError
 showErrorLocationL :: String -> String -> Int -> Int -> String
 showErrorLocationL lead source line column = concat
     [ lead, "| ", (lines source) !! (line - 1), "\n"    -- show the source line of code
-    , lead, "| ", take (column - 1) $ repeat ' ', "^"   -- show cursor pointing to the error
+    , lead, "  ", take (column - 1) $ repeat ' ', "^"   -- show cursor pointing to the error
     ]
 
 showErrorLocationI :: Int -> String -> Int -> Int -> String
