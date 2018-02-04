@@ -168,7 +168,7 @@ parseError mkmsg = do
         EOF -> logError ("Parsing error: " ++ mkmsg)
 
 expectationError :: String -> String -> Parser a
-expectationError expected actual = parseError $ concat ["Expecting ", expected, " but got ", actual, ":"]
+expectationError expected actual = logError $ concat ["Expecting ", expected, " but got ", actual, ":"]
 
 wrongTokenError :: TokenType -> TokenType -> Parser a
 wrongTokenError expected actual = expectationError (show expected) (show actual)
@@ -191,6 +191,18 @@ missingTokenError = do
             EOF -> ""
             Token _ p -> " after " ++ showAlexPos p
     expectationError "a Token" ("nothing" ++ more)
+
+checkNoMoreTokens :: Parser ()
+checkNoMoreTokens = do
+    ts <- getTokens
+    case ts of
+        Token tt _:_ -> do
+            t <- getLastParsedToken
+            case t of
+                Token tt' p -> parseError $ concat ["Expecting no more Tokens but got ", show tt, " after ", showAlexPos p, ":"]
+                EOF -> parseError "MAJOR FAILURE: Found nothing to parse but unparsed tokens still exist!"
+        _ -> return ()
+
 
 showFirst :: Show a => Int -> [a] -> String
 showFirst n l = if length l > n
@@ -312,6 +324,7 @@ parse env ts = do
 parseProgram :: Parser AST
 parseProgram = do
     stmt <- parseStatement
+    checkNoMoreTokens
     env <- getEnv
     return $ AST (envSourceFile env) stmt
 
