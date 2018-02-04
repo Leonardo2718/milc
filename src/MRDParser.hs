@@ -168,7 +168,7 @@ parseError mkmsg = do
         EOF -> logError ("Parsing error: " ++ mkmsg)
 
 expectationError :: String -> String -> Parser a
-expectationError expected actual = logError $ concat ["Expecting ", expected, " but got ", actual, ":"]
+expectationError expected actual = parseError $ concat ["Expecting ", expected, " but got ", actual, ":"]
 
 wrongTokenError :: TokenType -> TokenType -> Parser a
 wrongTokenError expected actual = expectationError (show expected) (show actual)
@@ -181,15 +181,23 @@ missingExpectedTokenError expected = do
     lastToken <- getLastParsedToken
     let more = case lastToken of
             EOF -> ""
-            Token _ p -> " after " ++ showAlexPos p
+            Token _ p -> " after Token at " ++ showAlexPos p
     expectationError (show expected) ("nothing" ++ more)
+
+missingExpectedTokenError' :: String -> Parser a
+missingExpectedTokenError' expected = do
+    lastToken <- getLastParsedToken
+    let more = case lastToken of
+            EOF -> ""
+            Token _ p -> " after Token at " ++ showAlexPos p
+    expectationError expected ("nothing" ++ more)
 
 missingTokenError :: Parser a
 missingTokenError = do
     lastToken <- getLastParsedToken
     let more = case lastToken of
             EOF -> ""
-            Token _ p -> " after " ++ showAlexPos p
+            Token _ p -> " after Token at " ++ showAlexPos p
     expectationError "a Token" ("nothing" ++ more)
 
 checkNoMoreTokens :: Parser ()
@@ -348,10 +356,11 @@ parseStatement = do
             stmt <- parseStatement
             return $ WhileDo expr stmt p
         Token INPUT p -> do
-            t' <- popToken
+            t' <- peekToken
             case t' of
-                Token (ID n) _ -> logMsgLn "-- parsing Input statement" >> return (Input n p)
+                Token (ID n) _ -> popToken >> logMsgLn "-- parsing Input statement" >> return (Input n p)
                 Token tt _ -> wrongTokenError' "ID" tt
+                EOF -> missingExpectedTokenError' "ID"
         Token (ID n) p -> do
             eatToken ASSIGN
             logMsgLn "-- parsing Assignment"

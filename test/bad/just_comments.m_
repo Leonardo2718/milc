@@ -1,0 +1,11 @@
+/*
+Some OK comments
+*/
+
+% Some more OK comments
+
+/*
+% even more /* OK comments */
+*/
+
+% but really /* nothing */ in the end
