@@ -21,3 +21,7 @@
 %%%%%%%%%                %%%%%%%%%%%%%%%%%%%
 
 % if i then write 0 else write 1
+
+begin
+% empty statement to meet bare-minimum language requirements
+end
