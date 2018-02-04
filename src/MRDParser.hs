@@ -175,18 +175,31 @@ showFirst n l = if length l > n
         firsts = take n l
 
 data AST = AST Statement
-data Statement = IfThenElse {stmtExpr :: Expression, thenBranch :: Statement, elseBranch :: Statement}
-               | WhileDo {stmtExpr :: Expression, doStmt :: Statement}
-               | Input {destID :: String}
-               | Assign {destID :: String, stmtExpr :: Expression}
-               | Write {sourceID :: String}
-               | Block {statements :: [Statement]}
-data Expression = Add Expression Expression
-                | Sub Expression Expression
-                | Mul Expression Expression
-                | Div Expression Expression
-                | Id String
-                | Num Int
+data Statement = IfThenElse {stmtExpr :: Expression, thenBranch :: Statement, elseBranch :: Statement, stmtPos :: AlexPosn}
+               | WhileDo {stmtExpr :: Expression, doStmt :: Statement, stmtPos :: AlexPosn}
+               | Input {destID :: String, stmtPos :: AlexPosn}
+               | Assign {destID :: String, stmtExpr :: Expression, stmtPos :: AlexPosn}
+               | Write {sourceID :: String, stmtPos :: AlexPosn}
+               | Block {statements :: [Statement], stmtPos :: AlexPosn} deriving (Eq)
+data Expression = Add { subExprL :: Expression, subExprR :: Expression, exprPos :: AlexPosn}
+                | Sub { subExprL :: Expression, subExprR :: Expression, exprPos :: AlexPosn}
+                | Mul { subExprL :: Expression, subExprR :: Expression, exprPos :: AlexPosn}
+                | Div { subExprL :: Expression, subExprR :: Expression, exprPos :: AlexPosn}
+                | Id { idName :: String, exprPos :: AlexPosn}
+                | Num { numValue :: Int, exprPos :: AlexPosn} deriving (Eq)
+
+showExpr :: String -> Expression -> String
+showExpr lead expr = intercalate "\n" (showSubExpr lead expr) where
+    showSubExpr l e = case e of
+        Add e1 e2 p -> concat [l, "Add\t\t(", showAlexPos p, ")"] : (showSubExpr (' ':' ':l) e1 ++ showSubExpr (' ':' ':l) e2)
+        Sub e1 e2 p -> concat [l, "Sub\t\t(", showAlexPos p, ")"] : (showSubExpr (' ':' ':l) e1 ++ showSubExpr (' ':' ':l) e2)
+        Mul e1 e2 p -> concat [l, "Mul\t\t(", showAlexPos p, ")"] : (showSubExpr (' ':' ':l) e1 ++ showSubExpr (' ':' ':l) e2)
+        Div e1 e2 p -> concat [l, "Div\t\t(", showAlexPos p, ")"] : (showSubExpr (' ':' ':l) e1 ++ showSubExpr (' ':' ':l) e2)
+        Id n p      -> [concat [l, "Id ", n, "\t\t(", showAlexPos p, ")"]]
+        Num v p     -> [concat [l, "Num ", show v, "\t\t(", showAlexPos p, ")"]]
+
+instance Show Expression where
+    show e = showExpr "" e
 
 peekToken :: Parser Token
 peekToken = do
@@ -272,42 +285,65 @@ parseStatementList =  do
 parseExpression :: Parser ()
 parseExpression = do
     logMsgLn "Looking for an Expression"
-    parseSubExpression
+    e <- parseSubExpression
+    logMsgLn "Found Expression:"
+    logMsgLn $ showExpr "  " e
+    return ()
     where
-        parseSubExpression :: Parser ()
+        parseSubExpression :: Parser Expression
         parseSubExpression = do
             logMsgLn "-- looking for a Subexpression"
-            parseTerm >> eatAddOp
-        parseTerm :: Parser ()
+            parseTerm >>= eatAddOp
+        parseTerm :: Parser Expression
         parseTerm = do
             logMsgLn "-- looking for a Term"
-            parseFactor >> eatMulOp
-        parseFactor :: Parser ()
+            parseFactor >>= eatMulOp
+        parseFactor :: Parser Expression
         parseFactor = do
             logMsgLn "-- looking for a factor"
             t <- popToken
-            case t of
-                Token SUB _ -> do
+            e <- case t of
+                Token SUB p -> do
                     t' <- popToken
                     case t' of
-                        Token (NUM _) _ -> return ()
+                        Token (NUM v) _ -> return $ Num (-v) p
                         _ -> parseError ("Expecting to fint NUM, got " ++ show t' ++ " instead")
-                Token LPAR _ -> parseExpression >> eatToken RPAR
-                Token (ID _) _ -> return ()
-                Token (NUM _) _ -> return ()
+                Token LPAR _ -> do
+                    e <- parseSubExpression
+                    eatToken RPAR
+                    return e
+                Token (ID n) p -> return $ Id n p
+                Token (NUM v) p -> return $ Num v p
                 _ -> parseError ("Unexpected " ++ show t)
             logMsgLn "-- found factor"
-        eatAddOp :: Parser ()
-        eatAddOp = do
+            return e
+        eatAddOp :: Expression -> Parser Expression
+        eatAddOp e1 = do
             t <- peekToken
             case t of
-                Token ADD _ -> popToken >> parseExpression
-                Token SUB _ -> popToken >> parseExpression
-                _           -> logMsgLn "---- Not part of Expression grammar: IGNORING"
-        eatMulOp :: Parser ()
-        eatMulOp = do
+                Token ADD p -> do
+                    popToken
+                    e2 <- parseSubExpression
+                    return $ Add e1 e2 p
+                Token SUB p -> do
+                    popToken
+                    e2 <- parseSubExpression
+                    return $ Sub e1 e2 p
+                _           -> do
+                    logMsgLn "---- Not part of Expression grammar: IGNORING"
+                    return e1
+        eatMulOp :: Expression -> Parser Expression
+        eatMulOp e1 = do
             t <- peekToken
             case t of
-                Token MUL _ -> popToken >> parseTerm
-                Token DIV _ -> popToken >> parseTerm
-                _           -> logMsgLn "---- Not part of Expression grammar: IGNORING"
+                Token MUL p -> do
+                    popToken
+                    e2 <- parseTerm
+                    return $ Mul e1 e2 p
+                Token DIV p -> do
+                    popToken
+                    e2 <- parseTerm
+                    return $ Div e1 e2 p
+                _           -> do
+                    logMsgLn "---- Not part of Expression grammar: IGNORING"
+                    return e1
