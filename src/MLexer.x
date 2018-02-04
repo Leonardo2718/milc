@@ -128,7 +128,7 @@ unembedComment input len = do               -- handle close of nested comment
 
 -- helper for printing "AlexPosn" values in a more human-friendly manner
 showAlexPos :: AlexPosn -> String
-showAlexPos (AlexPn _ l c) = concat ["line ", show l, " column ", show c]
+showAlexPos (AlexPn _ l c) = concat ["line ", show l, ", column ", show c]
 
 -- helper for generating lexer errors
 --
@@ -174,7 +174,11 @@ data TokenType  = IF
                 | RPAR
                 | SEMICOLON deriving (Eq, Show)
 
-data Token  = Token TokenType AlexPosn | EOF deriving (Eq, Show)
+data Token  = Token TokenType AlexPosn | EOF deriving (Eq)
+
+instance Show Token where
+    show (Token tt pos) = concat [show tt, " (", showAlexPos pos, ")"]
+    show EOF = "EOF"
 
 -- wrapper function for alexMonadScan for generating a Token, emitting error
 -- messages when necessary

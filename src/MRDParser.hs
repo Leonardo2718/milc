@@ -188,11 +188,6 @@ data Expression = Add Expression Expression
                 | Id String
                 | Num Int
 
-logTerminal :: Token -> [Token] -> Parser ()
-logTerminal t ts = do
-    logMsgLn ("-- found terminal: " ++ show t)
-    logMsgLn ("   remaining tokens: " ++ showFirst 4 ts)
-
 peekToken :: Parser Token
 peekToken = do
     ts <- getTokens
@@ -210,7 +205,7 @@ popToken = do
         t:ts' -> do
             setTokens ts'
             setLastParsedToken t
-            logMsgLn ("-- found terminal: " ++ show t)
+            logMsgLn ("-- popped terminal: " ++ show t)
             logMsgLn ("   remaining tokens: " ++ showFirst 4 ts')
             return t
 
