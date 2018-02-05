@@ -343,10 +343,14 @@ parse env ts = do
 
 parseProgram :: Parser AST
 parseProgram = do
+    logMsgLn "Parsing program"
     stmt <- parseStatement
     checkNoMoreTokens
+    logMsgLn "Parsing complete"
     env <- getEnv
-    return $ AST (envSourceFile env) stmt
+    let ast = AST (envSourceFile env) stmt
+    logTree ast
+    return ast
 
 parseStatement :: Parser Statement
 parseStatement = do
