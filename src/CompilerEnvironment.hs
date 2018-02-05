@@ -62,16 +62,6 @@ showCompilerOutput c = case runCompiler c of
 showCompilerLog :: CompilerMonad a -> String
 showCompilerLog c = case runCompiler c of (_, l) -> concat l
 
--- merge two compiler instances
-mergeCompilers :: Monoid a => CompilerMonad a -> CompilerMonad a -> CompilerMonad a
-mergeCompilers c1 c2 = merge (runCompiler c1) (runCompiler c2) where
-    merge :: Monoid a => (Either String a, [String]) -> (Either String a, [String]) -> CompilerMonad a
-    merge (r1,l1) (r2,l2) = writer ((), l1 ++ l2) >> mrets r1 r2
-    mrets (Left e1) (Left e2) = compError (e1 ++ e2)
-    mrets (Left e1) (Right _) = compError e1
-    mrets (Right _) (Left e2) = compError e2
-    mrets (Right v1) (Right v2) = return (mappend v1 v2)
-
 -- generate a compilation error and log it
 logMsg :: Monad m => String -> CompilerMonadT () m
 logMsg s = writer ((), [s])

@@ -97,20 +97,20 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 -- main program ----------------------------------------------------------------
 
 -- define steps of a compilation
-doCompilation :: CompilerEnvironment -> CompilerMonad [AST]
+doCompilation :: CompilerEnvironment -> CompilerMonad AST
 doCompilation env = do
     logMsgLn $ concat ["======= Compiling ", source , " ======="]
     ts <- scan env . envSource $ env
     (ast, _) <- parse env ts
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"
-    return [ast]
+    return ast
     where
         source = case envSourceFile env of
             "" -> "standard input"
             f -> f
 
 -- run the different stages of the compiler (currently only lexer)
-compile :: CompilerEnvironment -> CompilerMonad [AST]
+compile :: CompilerEnvironment -> CompilerMonad AST
 compile env = (doCompilation env) `catchCompError` handleCompError where
     handleCompError e = logError . concat $ ["\nCOMPILATION ERROR", atLocation, ":\n", e, "\n"]
     atLocation = case envSourceFile env of
@@ -118,39 +118,38 @@ compile env = (doCompilation env) `catchCompError` handleCompError where
         f  -> " in " ++ f
 
 -- compile a file (argument is path to the file)
-compileFile :: String -> IO (CompilerMonad [AST])
+compileFile :: String -> IO (CompilerMonad AST)
 compileFile f = do
     s <- readFile f
     return $ compile CompilerEnvironment {envSource = s, envSourceFile = f}
 
 -- compile multiple files, merging their compilation output together
-compileFiles :: [String] -> IO (CompilerMonad [AST])
-compileFiles [f] = compileFile f
-compileFiles (f:fs) = do
-    c <- compileFile f
-    cs <- compileFiles fs
-    return $ mergeCompilers c cs
+compileFiles :: [String] -> IO [CompilerMonad AST]
+compileFiles = mapM compileFile
 
 -- compile source from standard input
-compileStdIn :: IO (CompilerMonad [AST])
+compileStdIn :: IO (CompilerMonad AST)
 compileStdIn = do
     s <- getContents
     return . compile $ CompilerEnvironment {envSource = s, envSourceFile = ""}
 
--- print the compiler's output and log
-printLogAndOutput :: Show a => Options -> CompilerMonad a -> IO ()
-printLogAndOutput options c = do
-    putStrLn . showCompilerOutput $ c
-    when (optLogFile options /= "") (writeFile (optLogFile options) . showCompilerLog $ c)
+-- print the compilers' outputs and log
+printLogAndOutput :: Show a => Options -> [CompilerMonad a] -> IO ()
+printLogAndOutput options cs = case cs of
+    [] -> return ()
+    c:cs' -> write writeFile c >> mapM_ (write appendFile) cs' where
+        write logFileWriter comp = do
+            putStrLn . showCompilerOutput $ comp
+            when (optLogFile options /= "") (logFileWriter (optLogFile options) . showCompilerLog $ comp)
 
 -- invoke action based on parsed command line options
 runMain :: Options -> IO ()
 runMain options
     | optHelp options           = putStrLn helpMessage
         -- print help message if options '-h' or '--help' where passed
-    | optStdIn options          = compileStdIn >>= printLogAndOutput options
+    | optStdIn options          = do c <- compileStdIn; printLogAndOutput options [c];
         -- force compilation of standard input
-    | optInFiles options == []  = compileStdIn >>= printLogAndOutput options
+    | optInFiles options == []  = do c <- compileStdIn; printLogAndOutput options [c];
         -- compile standard input if no source files were provided
     | otherwise                 = (compileFiles $ optInFiles options) >>= printLogAndOutput options
         -- compile all source files
