@@ -33,7 +33,6 @@ import MRDParser
 
 import Data.List
 import Control.Monad.State
--- import Data.HashMap.Strict
 
 type Symbol = String
 data BinaryOp = AddOp | SubOp | MulOp | DivOp deriving (Eq, Show)
@@ -49,7 +48,7 @@ data OpCode = InputOp Symbol
 type BlockId = Int
 data Terminator = Jump {jumpTarget :: BlockId}
                 | Branch {jumpCondition :: MilValue, jumpTarget :: BlockId}
-                | BranchNot {jumpCondition :: MilValue, jumpTarget :: BlockId}
+                | BranchZero {jumpCondition :: MilValue, jumpTarget :: BlockId}
                 | Fallthrough
                 | Exit deriving (Eq, Show)
 
@@ -122,9 +121,6 @@ setBlockTerminator terminator (BasicBlock bbId opcodes _) = BasicBlock bbId opco
 mergeBasicBlocks :: BasicBlock -> BasicBlock -> BasicBlock
 mergeBasicBlocks (BasicBlock id1 opcodes1 _) (BasicBlock _ opcodes2 terminator) = BasicBlock id1 (opcodes1 ++ opcodes2) terminator
 
-mergeBasicBlockLists :: [BasicBlock] -> [BasicBlock] -> [BasicBlock]
-mergeBasicBlockLists l1 l2 = init l1 ++ [mergeBasicBlocks (last l1) (head l2)] ++ tail l2
-
 genMil :: AST -> MilGenerator Mil
 genMil (AST _ stmt) = do
     logMsgLn "Walking AST\nGenerating MIL for top level statement"
@@ -138,11 +134,20 @@ genMilBasicBlocks lastTerminator stmt = do
             logMsgLn "Walking IfThenElse statement"
             logMsgLn "-- generating merge point"
             mergePoint <- generateBlock [] lastTerminator
-            thenBlocks <- genMilBasicBlocks (Jump (blockId mergePoint)) thenStmt
-            condition <- genMilExpression expr
             elseBlocks <- genMilBasicBlocks Fallthrough elseStmt
-            checkCondition <- generateBlock [] (BranchNot condition (blockId (head elseBlocks)))
-            return $ checkCondition:thenBlocks ++ elseBlocks ++ [mergePoint]
+            condition <- genMilExpression expr
+            case length elseBlocks of
+                1 -> do
+                    thenBlocks <- genMilBasicBlocks Fallthrough thenStmt
+                    case length thenBlocks of
+                        1 -> return []
+                        _ -> do
+                            checkCondition <- generateBlock [] (BranchZero condition (blockId mergePoint))
+                            return $ checkCondition:thenBlocks ++ [mergePoint]
+                _ -> do
+                    thenBlocks <- genMilBasicBlocks (Jump (blockId mergePoint)) thenStmt
+                    checkCondition <- generateBlock [] (BranchZero condition (blockId $ head elseBlocks))
+                    return $ checkCondition:thenBlocks ++ elseBlocks ++ [mergePoint]
         WhileDo expr stmt _ -> do
             logMsgLn "Walking WhileDo statement"
             logMsgLn "-- Generating loop exit block"
@@ -150,9 +155,9 @@ genMilBasicBlocks lastTerminator stmt = do
             logMsgLn "-- Generating loop condtion"
             condition <- genMilExpression expr
             logMsgLn "-- Generating loop condition check"
-            checkCondition <- generateBlock [] (BranchNot condition (blockId exitBlock))
+            checkCondition <- generateBlock [] (BranchZero condition (blockId exitBlock))
             loopBody <- genMilBasicBlocks (Jump (blockId checkCondition)) stmt
-            if length loopBody == 0 then do
+            if length loopBody == 1 then do
                 logMsgLn "-- Loop body is empty so won't generate MIL for it"
                 return []
             else do
@@ -161,7 +166,12 @@ genMilBasicBlocks lastTerminator stmt = do
             logMsgLn "Walking Block statement"
             blocks <- mapM (genMilBasicBlocks Fallthrough) $ stmts
             terminatorBlock <- generateBlock [] lastTerminator
-            return $ foldr mergeBasicBlockLists [terminatorBlock] blocks
+            return . concat $ mergeSingleBlocks blocks terminatorBlock
+            where
+                mergeSingleBlocks :: [[BasicBlock]] -> BasicBlock -> [[BasicBlock]]
+                mergeSingleBlocks ([b1]:[b2]:bss) t = mergeSingleBlocks ([mergeBasicBlocks b1 b2]:bss) t
+                mergeSingleBlocks [] t = [[t]]
+                mergeSingleBlocks (bs:bss) t = bs:mergeSingleBlocks bss t
         _ -> do
             opcode <- genMilOpCode stmt
             block <- generateBlock [opcode] lastTerminator
