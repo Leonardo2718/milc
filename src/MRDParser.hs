@@ -290,7 +290,7 @@ instance Show Statement where
 instance Show Expression where
     show = showTree ""
 
-logTree :: AbstractSyntaxTree t => t -> Parser ()
+logTree :: (AbstractSyntaxTree t, Monad m) => t -> CompilerMonadT () m
 logTree t = do
     logMsgLn "--------------------------------------------------"
     logMsgLn $ showTree "" t
