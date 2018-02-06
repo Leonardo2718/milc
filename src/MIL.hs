@@ -119,6 +119,12 @@ generateBlock opcodes terminator = do
 setBlockTerminator :: Terminator -> BasicBlock -> BasicBlock
 setBlockTerminator terminator (BasicBlock bbId opcodes _) = BasicBlock bbId opcodes terminator
 
+mergeBasicBlocks :: BasicBlock -> BasicBlock -> BasicBlock
+mergeBasicBlocks (BasicBlock id1 opcodes1 _) (BasicBlock _ opcodes2 terminator) = BasicBlock id1 (opcodes1 ++ opcodes2) terminator
+
+mergeBasicBlockLists :: [BasicBlock] -> [BasicBlock] -> [BasicBlock]
+mergeBasicBlockLists l1 l2 = init l1 ++ [mergeBasicBlocks (last l1) (head l2)] ++ tail l2
+
 genMil :: AST -> MilGenerator Mil
 genMil (AST _ stmt) = do
     logMsgLn "Walking AST\nGenerating MIL for top level statement"
@@ -155,7 +161,7 @@ genMilBasicBlocks lastTerminator stmt = do
             logMsgLn "Walking Block statement"
             blocks <- mapM (genMilBasicBlocks Fallthrough) $ stmts
             terminatorBlock <- generateBlock [] lastTerminator
-            return $ concat blocks ++ [terminatorBlock]
+            return $ foldr mergeBasicBlockLists [terminatorBlock] blocks
         _ -> do
             opcode <- genMilOpCode stmt
             block <- generateBlock [opcode] lastTerminator
