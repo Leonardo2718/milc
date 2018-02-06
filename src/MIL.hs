@@ -49,6 +49,7 @@ data OpCode = InputOp Symbol
 type BlockId = Int
 data Terminator = Jump {jumpTarget :: BlockId}
                 | Branch {jumpCondition :: MilValue, jumpTarget :: BlockId}
+                | BranchNot {jumpCondition :: MilValue, jumpTarget :: BlockId}
                 | Fallthrough
                 | Exit deriving (Eq, Show)
 
@@ -115,45 +116,49 @@ generateBlock opcodes terminator = do
     bbId <- getBlockId
     return $ BasicBlock bbId opcodes terminator
 
-setBlockTerminator :: BasicBlock -> Terminator -> BasicBlock
-setBlockTerminator (BasicBlock bbId opcodes _) = BasicBlock bbId opcodes
-
-setLastBlockTerminator :: [BasicBlock] -> Terminator -> [BasicBlock]
-setLastBlockTerminator blocks terminator = init blocks ++ [setBlockTerminator (last blocks) terminator]
+setBlockTerminator :: Terminator -> BasicBlock -> BasicBlock
+setBlockTerminator terminator (BasicBlock bbId opcodes _) = BasicBlock bbId opcodes terminator
 
 genMil :: AST -> MilGenerator Mil
 genMil (AST _ stmt) = do
     logMsgLn "Walking AST\nGenerating MIL for top level statement"
-    blocks <- genMilBasicBlocks stmt
-    logMsgLn "Generating final exit block"
-    exitBlock <- generateBlock [] Exit
-    return $ Mil (blocks ++ [exitBlock])
+    blocks <- genMilBasicBlocks Exit stmt
+    return $ Mil blocks
 
-genMilBasicBlocks :: Statement -> MilGenerator [BasicBlock]
-genMilBasicBlocks stmt = do
+genMilBasicBlocks :: Terminator -> Statement -> MilGenerator [BasicBlock]
+genMilBasicBlocks lastTerminator stmt = do
     case stmt of
-        IfThenElse _ _ _ _ -> return []
+        IfThenElse expr thenStmt elseStmt _ -> do
+            logMsgLn "Walking IfThenElse statement"
+            logMsgLn "-- generating merge point"
+            mergePoint <- generateBlock [] lastTerminator
+            thenBlocks <- genMilBasicBlocks (Jump (blockId mergePoint)) thenStmt
+            condition <- genMilExpression expr
+            elseBlocks <- genMilBasicBlocks Fallthrough elseStmt
+            checkCondition <- generateBlock [] (BranchNot condition (blockId (head elseBlocks)))
+            return $ checkCondition:thenBlocks ++ elseBlocks ++ [mergePoint]
         WhileDo expr stmt _ -> do
             logMsgLn "Walking WhileDo statement"
-            loopBody <- genMilBasicBlocks stmt
+            logMsgLn "-- Generating loop exit block"
+            exitBlock <- generateBlock [] lastTerminator
+            logMsgLn "-- Generating loop condtion"
+            condition <- genMilExpression expr
+            logMsgLn "-- Generating loop condition check"
+            checkCondition <- generateBlock [] (BranchNot condition (blockId exitBlock))
+            loopBody <- genMilBasicBlocks (Jump (blockId checkCondition)) stmt
             if length loopBody == 0 then do
                 logMsgLn "-- Loop body is empty so won't generate MIL for it"
                 return []
             else do
-                logMsgLn "-- Generating loop condtion"
-                condition <- genMilExpression expr
-                logMsgLn "-- Generating loop condition check"
-                checkCondition <- generateBlock [] (Branch condition (blockId (head loopBody)))
-                logMsgLn "-- Generating initial jumpt to loop condition check"
-                gotoConditionCheck <- generateBlock [] (Jump (blockId checkCondition))
-                return $ (gotoConditionCheck:loopBody) ++ [checkCondition]
+                return $ checkCondition:loopBody ++ [exitBlock]
         Block stmts _ -> do
             logMsgLn "Walking Block statement"
-            blocks <- mapM genMilBasicBlocks stmts
-            return $ concat blocks
+            blocks <- mapM (genMilBasicBlocks Fallthrough) $ stmts
+            terminatorBlock <- generateBlock [] lastTerminator
+            return $ concat blocks ++ [terminatorBlock]
         _ -> do
             opcode <- genMilOpCode stmt
-            block <- generateBlock [opcode] Fallthrough
+            block <- generateBlock [opcode] lastTerminator
             return [block]
 
 genMilOpCode :: Statement -> MilGenerator OpCode
