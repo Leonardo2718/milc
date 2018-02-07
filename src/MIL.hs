@@ -106,15 +106,26 @@ runMilGenerator ilgen ast = do
 generateMil :: AST -> CompilerMonad (Mil, MilGenState)
 generateMil ast = do
     logMsgLn "=== Running MIL generator ==="
-    mil <- runMilGenerator genMil ast
+    milgen@(Mil mil,_) <- runMilGenerator genMil ast
     logMsgLn "MIL generation complete"
-    return mil
+    logMil mil
+    return milgen
 
 logMil :: Monad m => [BasicBlock] -> CompilerMonadT () m
 logMil bbs = do
     logMsgLn "--------------------------------------------------"
     logMsgLn $ showMil bbs
     logMsgLn "--------------------------------------------------"
+
+logMilLines :: Monad m => Int -> [BasicBlock] -> CompilerMonadT () m
+logMilLines l bbs = do
+    logMsgLn "--------------------------------------------------"
+    logMsgLn $ (asLines . lines . showMil $ bbs)
+    logMsgLn "--------------------------------------------------"
+    where
+        asLines ls = if length ls > l
+            then (unlines . take l $ ls) ++ "  ..."
+            else intercalate "\n" ls
 
 milGenError :: String -> MilGenerator a
 milGenError msg = logError ("MIL generation error: " ++ msg)
@@ -133,7 +144,6 @@ mergeBasicBlocks (BasicBlock id1 opcodes1 _) (BasicBlock _ opcodes2 terminator) 
 genMil :: AST -> MilGenerator Mil
 genMil ast@(AST _ stmt) = do
     logMsgLn "Walking AST: Generating MIL for top level statement"
-    logTree ast
     blocks <- genMilBasicBlocks Exit stmt
     return $ Mil blocks
 

@@ -303,7 +303,7 @@ logTreeLines l t = do
     logMsgLn "--------------------------------------------------"
     where
         asLines ls = if length ls > l
-            then (unlines . take l . lines $ showTree "" t) ++ "  ..."
+            then (unlines . take l $ ls) ++ "  ..."
             else intercalate "\n" ls
 
 peekToken :: Parser Token
@@ -347,8 +347,9 @@ eatToken tt = eatValueToken (show tt) (\tt' -> if tt == tt' then Just () else No
 parse :: CompilerEnvironment -> [Token] -> CompilerMonad (AST, ParserState)
 parse env ts = do
     logMsgLn "=== Running parser ==="
-    p <- runParser env parseProgram ts
+    p@(ast, _) <- runParser env parseProgram ts
     logMsgLn "Parsing successful"
+    logTree ast
     return p
 
 parseProgram :: Parser AST
@@ -356,11 +357,8 @@ parseProgram = do
     logMsgLn "Parsing program"
     stmt <- parseStatement
     checkNoMoreTokens
-    logMsgLn "Parsing complete"
     env <- getEnv
-    let ast = AST (envSourceFile env) stmt
-    logTree ast
-    return ast
+    return $ AST (envSourceFile env) stmt
 
 parseStatement :: Parser Statement
 parseStatement = do

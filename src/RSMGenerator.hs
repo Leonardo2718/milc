@@ -32,6 +32,8 @@ module RSMGenerator where
 import CompilerEnvironment
 import MIL
 
+import Data.List
+
 type Register = String
 data Label = Label Int deriving (Eq)
 data RSMOpCode  = CPUSH Int
@@ -64,33 +66,80 @@ instance Show RSMOpCode where
         LABEL l -> show l ++ ":"
 
 instance Show RSMCode where
-    show (RSMCode opcodes) = unlines . map showWithPadding $ opcodes where
+    show (RSMCode opcodes) = intercalate "\n" . map showWithPadding $ opcodes where
         showWithPadding l@(LABEL _) = show l
         showWithPadding op = "    " ++ show op
 
+logRSMCode :: Monad m => [RSMOpCode] -> CompilerMonadT () m
+logRSMCode opcodes = do
+    logMsgLn "--------------------------------------------------"
+    logMsgLn . show . RSMCode $ opcodes
+    logMsgLn "--------------------------------------------------"
+
 generateRSMCode :: Mil -> CompilerMonad RSMCode
-generateRSMCode (Mil bbs) = return . RSMCode . concat . map fromBasicBlock $ bbs
+generateRSMCode (Mil bbs) = do
+    logMsgLn "=== Running code generation for RSM ==="
+    logMsgLn "Generating code from MIL"
+    codes <- mapM fromBasicBlock bbs
+    logMsgLn "Code generation successful"
+    logRSMCode . concat $ codes
+    return . RSMCode . concat $ codes
 
-fromBasicBlock :: BasicBlock -> [RSMOpCode]
-fromBasicBlock (BasicBlock bid opcodes terminator) = LABEL (Label bid) : (concat $ map fromOpCode opcodes) ++ fromTerminator terminator
+fromBasicBlock :: BasicBlock -> CompilerMonad [RSMOpCode]
+fromBasicBlock bb@(BasicBlock bid opcodes terminator) = do
+    logMsgLn "Generating code for BasicBlock"
+    logMil [bb]
+    codes <- mapM fromOpCode opcodes
+    term <- fromTerminator terminator
+    let codes' = LABEL (Label bid) : (concat codes) ++ term
+    logRSMCode codes'
+    return codes'
 
-fromTerminator :: Terminator -> [RSMOpCode]
-fromTerminator t = case t of
-    Jump target -> [JUMP (Label target)]
-    BranchZero val target -> fromMilValue val ++ [CJUMP (Label target)]
-    _ -> []
+fromTerminator :: Terminator -> CompilerMonad [RSMOpCode]
+fromTerminator t = do
+    logMsgLn $ "Generating code for Terminator: "  ++ show t
+    codes <- case t of
+        Jump target -> do
+            let code = JUMP (Label target)
+            -- logMsgLn $ "  " ++ show code
+            return [code]
+        BranchZero val target -> do
+            codes <- fromMilValue val
+            return $ codes ++ [CJUMP (Label target)]
+        Fallthrough -> do
+            logMsgLn "-- No need to generate anything for Fallthrough"
+            return []
+        Exit -> do
+            logMsgLn "-- No need to generate anything for Exit"
+            return []
+        _ -> logError $ "Unrecognized terminator: " ++ show t
+    logRSMCode codes
+    return codes
 
-fromOpCode :: OpCode -> [RSMOpCode]
-fromOpCode opcode = case opcode of
-    InputOp name -> [READ name]
-    WriteOp val -> fromMilValue val
-    Store name val -> fromMilValue val ++ [LOAD name]
+fromOpCode :: OpCode -> CompilerMonad [RSMOpCode]
+fromOpCode opcode = do
+    logMsgLn $ "Generating code for OpCode: " ++ show opcode
+    codes <- case opcode of
+        InputOp name -> return [READ name]
+        WriteOp val -> fromMilValue val
+        Store name val -> do
+            codes <- fromMilValue val
+            return $ codes ++ [LOAD name]
+    logRSMCode codes
+    return codes
 
-fromMilValue :: MilValue -> [RSMOpCode]
-fromMilValue val = case val of
-    BinaryOp op lhs rhs -> fromMilValue lhs ++ fromMilValue rhs ++ [OP 2 (fromBinaryOp op)]
-    Const v -> [CPUSH v]
-    Load n -> [RPUSH n]
+fromMilValue :: MilValue -> CompilerMonad [RSMOpCode]
+fromMilValue val = do
+    logMsgLn $ "Generating code from MilValue: " ++ show val
+    codes <- case val of
+        BinaryOp op lhs rhs -> do
+            lhsCodes <- fromMilValue lhs
+            rhsCodes <- fromMilValue rhs
+            return $ lhsCodes ++ rhsCodes ++ [OP 2 (fromBinaryOp op)]
+        Const v -> return [CPUSH v]
+        Load n -> return [RPUSH n]
+    logRSMCode codes
+    return codes
 
 fromBinaryOp :: BinaryOp -> String
 fromBinaryOp AddOp = "+"
