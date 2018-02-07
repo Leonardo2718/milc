@@ -39,6 +39,7 @@ import CompilerEnvironment
 import MLexer
 import MRDParser
 import MIL
+import RSMGenerator
 
 -- option processing -----------------------------------------------------------
 
@@ -98,21 +99,22 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 -- main program ----------------------------------------------------------------
 
 -- define steps of a compilation
-doCompilation :: CompilerEnvironment -> CompilerMonad Mil
+doCompilation :: CompilerEnvironment -> CompilerMonad RSMCode
 doCompilation env = do
     logMsgLn $ concat ["======= Compiling ", source , " ======="]
     ts <- scan env . envSource $ env
     (ast, _) <- parse env ts
     (mil, _) <- generateMil ast
+    targetCode <- generateRSMCode mil
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"
-    return mil
+    return targetCode
     where
         source = case envSourceFile env of
             "" -> "standard input"
             f -> f
 
 -- run the different stages of the compiler (currently only lexer)
-compile :: CompilerEnvironment -> CompilerMonad Mil
+compile :: CompilerEnvironment -> CompilerMonad RSMCode
 compile env = (doCompilation env) `catchCompError` handleCompError where
     handleCompError e = logError . concat $ ["\nCOMPILATION ERROR", atLocation, ":\n", e, "\n"]
     atLocation = case envSourceFile env of
@@ -120,17 +122,17 @@ compile env = (doCompilation env) `catchCompError` handleCompError where
         f  -> " in " ++ f
 
 -- compile a file (argument is path to the file)
-compileFile :: String -> IO (CompilerMonad Mil)
+compileFile :: String -> IO (CompilerMonad RSMCode)
 compileFile f = do
     s <- readFile f
     return $ compile CompilerEnvironment {envSource = s, envSourceFile = f}
 
 -- compile multiple files, merging their compilation output together
-compileFiles :: [String] -> IO [CompilerMonad Mil]
+compileFiles :: [String] -> IO [CompilerMonad RSMCode]
 compileFiles = mapM compileFile
 
 -- compile source from standard input
-compileStdIn :: IO (CompilerMonad Mil)
+compileStdIn :: IO (CompilerMonad RSMCode)
 compileStdIn = do
     s <- getContents
     return . compile $ CompilerEnvironment {envSource = s, envSourceFile = ""}
