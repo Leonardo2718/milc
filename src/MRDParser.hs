@@ -296,6 +296,16 @@ logTree t = do
     logMsgLn $ showTree "" t
     logMsgLn "--------------------------------------------------"
 
+logTreeLines :: (AbstractSyntaxTree t, Monad m) => Int -> t -> CompilerMonadT () m
+logTreeLines l t = do
+    logMsgLn "--------------------------------------------------"
+    logMsgLn $ (asLines . lines $ showTree "" t)
+    logMsgLn "--------------------------------------------------"
+    where
+        asLines ls = if length ls > l
+            then (unlines . take l . lines $ showTree "" t) ++ "  ..."
+            else intercalate "\n" ls
+
 peekToken :: Parser Token
 peekToken = do
     ts <- getTokens
@@ -449,7 +459,7 @@ parseExpression = do
             return e
         eatAddOp :: Expression -> Parser Expression
         eatAddOp e1 = do
-            logMsgLn "-- looking for Add/Sub"
+            logMsgLn "-- looking for ADD or SUB"
             t <- peekToken
             case t of
                 Token ADD p -> do
@@ -461,11 +471,11 @@ parseExpression = do
                     e2 <- parseSubExpression
                     return $ Sub e1 e2 p
                 _           -> do
-                    logMsgLn "----- Not part of Expression grammar: IGNORING"
+                    logMsgLn "   is neither ADD nor SUB: IGNORING"
                     return e1
         eatMulOp :: Expression -> Parser Expression
         eatMulOp e1 = do
-            logMsgLn "-- looking for Mul/Div"
+            logMsgLn "-- looking for MUL or DIV"
             t <- peekToken
             case t of
                 Token MUL p -> do
@@ -477,5 +487,5 @@ parseExpression = do
                     e2 <- parseTerm
                     return $ Div e1 e2 p
                 _           -> do
-                    logMsgLn "----- Not part of Expression grammar: IGNORING"
+                    logMsgLn "   is neither MUL nor DIV: IGNORING"
                     return e1
