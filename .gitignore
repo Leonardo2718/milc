@@ -3,3 +3,4 @@ make_build/
 *.log
 cabal.sandbox.config
 .cabal-sandbox/
+out/

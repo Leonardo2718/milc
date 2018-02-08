@@ -33,6 +33,7 @@ import System.IO
 import Data.List
 import Data.Foldable
 import Control.Monad
+import System.FilePath.Posix
 
 -- local imports
 import CompilerEnvironment
@@ -46,8 +47,9 @@ import RSMGenerator
 -- data type for representing program (comand line) options
 data Options = Options
     { optInFiles        :: [String] -- list of source files to compile
+    , optStdOut         :: Bool     -- print ouput to standard output
     , optStdIn          :: Bool     -- read source from std input
-    , optOutFile        :: String   -- path to output file
+    , optOutDir         :: String   -- path to output directory
     , optLogFile        :: String
     , optHelp           :: Bool     -- display usage information
     }
@@ -56,8 +58,9 @@ data Options = Options
 defaultOptions :: Options
 defaultOptions = Options
     { optInFiles = []
+    , optStdOut = False
     , optStdIn = False
-    , optOutFile = ""
+    , optOutDir = ""
     , optLogFile = ""
     , optHelp = False
     }
@@ -65,15 +68,18 @@ defaultOptions = Options
 -- option transformation definition (changes option values based on command line arguments)
 optionTransforms :: [OptDescr (Options -> Options)]
 optionTransforms =
-    [ Option    [] ["stdin"]
-                (NoArg (\ opts -> opts {optStdIn = True}) )
-                "read source from standard input"
-    -- , Option    ['o'] ["output"]
-    --             (ReqArg (\ s opts -> opts {optOutFile = s}) "FILE")
-    --             "write output to specified file (defaults to standard output if not specified)"
+    [ Option    [] ["stdout"]
+                (NoArg (\ opts -> opts {optStdOut = True}))
+                "print output to standard output"
+    , Option    [] ["stdin"]
+                (NoArg (\ opts -> opts {optStdIn = True, optStdOut = True}) )
+                "read source from standard input (implies --stdout)"
+    , Option    ['d'] ["outdir"]
+                (ReqArg (\ s opts -> opts {optOutDir = s}) "DIRECTORY")
+                "put output files in directory DIRECTORY"
     , Option    ['l'] ["log"]
                 (OptArg (\ s opts -> opts {optLogFile = getLogFile s}) "FILE_NAME")
-                "write log to file FILE_NAME"
+                "generate log and write it to file FILE_NAME (mcomp.log if none specified)"
     , Option    ['h'] ["help"]
                 (NoArg (\ opts -> opts {optHelp = True}) )
                 "display this help message"
@@ -83,8 +89,10 @@ optionTransforms =
 
 -- option transformation application
 applyOptionTransforms :: [OptDescr (Options -> Options)] -> [String] -> Options -> Options
-applyOptionTransforms transforms argv defaults =
-    case getOpt' Permute transforms argv of
+applyOptionTransforms transforms argv defaults = opts {optStdOut=newStdOut,optStdIn=newStdIn} where
+    newStdOut = optStdOut opts || (optInFiles opts == [])
+    newStdIn  = optStdIn opts || (optInFiles opts == [])
+    opts = case getOpt' Permute transforms argv of
         (o, p, [], [])  -> (foldl (flip id) defaults o) {optInFiles = p}
         (_, _, n, [])   -> error (concatMap (\ a -> "Unknown argument: " ++ a ++ "\n") n ++ helpMessage)
         (_,_,_,errors)  -> error (concat errors ++ helpMessage)
@@ -138,24 +146,37 @@ compileStdIn = do
     return . compile $ CompilerEnvironment {envSource = s, envSourceFile = ""}
 
 -- print the compilers' outputs and log
-printLogAndOutput :: Show a => Options -> [CompilerMonad a] -> IO ()
-printLogAndOutput options cs = case cs of
-    [] -> return ()
-    c:cs' -> write writeFile c >> mapM_ (write appendFile) cs' where
-        write logFileWriter comp = do
-            putStrLn . showCompilerOutput $ comp
-            when (optLogFile options /= "") (logFileWriter (optLogFile options) . showCompilerLog $ comp)
+printCompilerOutputs :: Show a => Options -> [CompilerMonad a] -> IO ()
+printCompilerOutputs options comps = if optStdOut options
+    then mapM_ (putStrLn . extractOutput . showCompilerOutput) comps
+    else mapM_ writeOutput (zip (optInFiles options) comps)
+    where
+        extractOutput o = case o of
+            Left e -> e
+            Right o' -> o'
+        writeOutput (s, c) = do
+            let outFile = replaceExtension (if optOutDir options == "" then s else replaceDirectory s (optOutDir options) ) "csh"
+            case showCompilerOutput c of
+                Left e -> putStrLn e
+                Right o -> writeFile outFile o
+printLogsAndOutputs :: Show a => Options -> [CompilerMonad a] -> IO ()
+printLogsAndOutputs options comps = do
+    printCompilerOutputs options comps
+    when (optLogFile options /= "") $ writeLogFile comps
+    where
+        writeLogFile cs = case cs of
+            [] -> return ()
+            c:cs -> writeLogFileWith writeFile c >> mapM_ (writeLogFileWith appendFile) cs
+        writeLogFileWith fileWriter c = fileWriter (optLogFile options) . showCompilerLog $ c
 
 -- invoke action based on parsed command line options
 runMain :: Options -> IO ()
 runMain options
     | optHelp options           = putStrLn helpMessage
         -- print help message if options '-h' or '--help' where passed
-    | optStdIn options          = do c <- compileStdIn; printLogAndOutput options [c];
+    | optStdIn options          = do c <- compileStdIn; printLogsAndOutputs options [c];
         -- force compilation of standard input
-    | optInFiles options == []  = do c <- compileStdIn; printLogAndOutput options [c];
-        -- compile standard input if no source files were provided
-    | otherwise                 = (compileFiles $ optInFiles options) >>= printLogAndOutput options
+    | otherwise                 = (compileFiles $ optInFiles options) >>= printLogsAndOutputs options
         -- compile all source files
 
 main :: IO ()
