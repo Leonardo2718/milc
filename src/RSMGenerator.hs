@@ -30,6 +30,7 @@ License:
 module RSMGenerator where
 
 import CompilerEnvironment
+import MilcUtils
 import MIL
 
 import Data.List
@@ -71,10 +72,7 @@ instance Show RSMCode where
         showWithPadding op = "    " ++ show op
 
 logRSMCode :: Monad m => [RSMOpCode] -> CompilerMonadT () m
-logRSMCode opcodes = do
-    logMsgLn "--------------------------------------------------"
-    logMsgLn . show . RSMCode $ opcodes
-    logMsgLn "--------------------------------------------------"
+logRSMCode = logBlock . show . RSMCode -- do
 
 generateRSMCode :: Mil -> CompilerMonad RSMCode
 generateRSMCode (Mil bbs) = do
@@ -101,7 +99,6 @@ fromTerminator t = do
     codes <- case t of
         Jump target -> do
             let code = JUMP (Label target)
-            -- logMsgLn $ "  " ++ show code
             return [code]
         BranchZero val target -> do
             codes <- fromMilValue val

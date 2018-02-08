@@ -29,6 +29,7 @@ License:
 module MIL where
 
 import CompilerEnvironment
+import MilcUtils
 import MRDParser
 
 import Data.List
@@ -112,20 +113,10 @@ generateMil ast = do
     return milgen
 
 logMil :: Monad m => [BasicBlock] -> CompilerMonadT () m
-logMil bbs = do
-    logMsgLn "--------------------------------------------------"
-    logMsgLn $ showMil bbs
-    logMsgLn "--------------------------------------------------"
+logMil = logBlock . showMil
 
 logMilLines :: Monad m => Int -> [BasicBlock] -> CompilerMonadT () m
-logMilLines l bbs = do
-    logMsgLn "--------------------------------------------------"
-    logMsgLn $ (asLines . lines . showMil $ bbs)
-    logMsgLn "--------------------------------------------------"
-    where
-        asLines ls = if length ls > l
-            then (unlines . take l $ ls) ++ "  ..."
-            else intercalate "\n" ls
+logMilLines l = logBlockLines l . showMil
 
 milGenError :: String -> MilGenerator a
 milGenError msg = logError ("MIL generation error: " ++ msg)
@@ -153,7 +144,6 @@ genMilBasicBlocks lastTerminator stmt = do
     logTreeLines 6 stmt
     case stmt of
         IfThenElse expr thenStmt elseStmt _ -> do
-            -- logMsgLn "Walking IfThenElse statement"
             logMsgLn "-- generating merge point"
             mergePoint <- generateBlock [] lastTerminator
             logMil [mergePoint]
@@ -188,7 +178,6 @@ genMilBasicBlocks lastTerminator stmt = do
                     logMil [checkCondition]
                     return $ checkCondition:thenBlocks ++ elseBlocks ++ [mergePoint]
         WhileDo expr stmt _ -> do
-            -- logMsgLn "Walking WhileDo statement"
             logMsgLn "-- Generating loop exit block"
             exitBlock <- generateBlock [] lastTerminator
             logMsgLn "-- Generating loop condtion"
@@ -203,7 +192,6 @@ genMilBasicBlocks lastTerminator stmt = do
             else do
                 return $ checkCondition:loopBody ++ [exitBlock]
         Block stmts _ -> do
-            -- logMsgLn "Walking Block statement"
             logMsgLn "-- will walk all sub-Statements"
             blocks <- mapM (genMilBasicBlocks Fallthrough) $ stmts
             logMsgLn "-- generated BasicBlocks for Block statement"

@@ -110,6 +110,7 @@ import Data.List
 import Control.Monad.State
 
 import CompilerEnvironment
+import MilcUtils
 import MLexer
 
 data ParserState = ParserState  { compilerEnv       :: CompilerEnvironment
@@ -216,13 +217,6 @@ checkNoMoreTokens = do
         Token tt p:_ ->  parseErrorAt p $ concat ["Unexpected ", show tt, " (expected nothing):"]
         _ -> return ()
 
-showFirst :: Show a => Int -> [a] -> String
-showFirst n l = if length l > n
-    then concat ["[", intercalate ", " (map show firsts), ", ..."]
-    else show firsts
-    where
-        firsts = take n l
-
 class AbstractSyntaxTree a where
     nameOf :: a -> String
     positionOf :: a -> AlexPosn
@@ -291,20 +285,10 @@ instance Show Expression where
     show = showTree ""
 
 logTree :: (AbstractSyntaxTree t, Monad m) => t -> CompilerMonadT () m
-logTree t = do
-    logMsgLn "--------------------------------------------------"
-    logMsgLn $ showTree "" t
-    logMsgLn "--------------------------------------------------"
+logTree = logBlock . showTree ""
 
 logTreeLines :: (AbstractSyntaxTree t, Monad m) => Int -> t -> CompilerMonadT () m
-logTreeLines l t = do
-    logMsgLn "--------------------------------------------------"
-    logMsgLn $ (asLines . lines $ showTree "" t)
-    logMsgLn "--------------------------------------------------"
-    where
-        asLines ls = if length ls > l
-            then (unlines . take l $ ls) ++ "  ..."
-            else intercalate "\n" ls
+logTreeLines l = logBlockLines l . showTree ""
 
 peekToken :: Parser Token
 peekToken = do
