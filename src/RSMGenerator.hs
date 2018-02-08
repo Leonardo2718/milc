@@ -35,11 +35,7 @@ import MIL
 
 import Data.List
 import System.IO
-import Control.Monad.IO.Class
 import System.FilePath.Posix
-
-import Control.Monad.Writer
-import Control.Monad.Except
 
 
 type Register = String

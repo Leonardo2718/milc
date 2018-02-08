@@ -30,6 +30,9 @@ import Control.Monad.Writer
 import Control.Monad.Except
 import Data.List
 import Data.Functor.Identity
+import System.IO
+import Control.Monad.IO.Class as MCIO
+
 
 -- data type representing the compiler state
 data CompilerEnvironment = CompilerEnvironment
@@ -42,12 +45,17 @@ data CompilerEnvironment = CompilerEnvironment
 type CompilerLogMonadT m = WriterT [String] m
 type CompilerMonadT a m = ExceptT String (CompilerLogMonadT m) a
 type CompilerMonad a = CompilerMonadT a Identity
+type CompilerIOMonad a = CompilerMonadT a IO
 
 -- unwrap compiler monad
 runCompiler :: CompilerMonad a -> (Either String a, [String])
 runCompiler = runWriter . runExceptT
 runCompilerT :: Monad m => CompilerMonadT a m -> m (Either String a, [String])
 runCompilerT = runWriterT . runExceptT
+
+-- lift IO to CompilerIOMonad
+liftIO :: IO a -> CompilerIOMonad a
+liftIO = MCIO.liftIO
 
 -- wrap up compiler monad
 compiler :: Monad m => (Either String a, [String]) -> CompilerMonadT a m

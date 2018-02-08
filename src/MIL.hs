@@ -35,6 +35,7 @@ import MRDParser
 import Data.List
 import Control.Monad.State
 
+
 type Symbol = String
 data BinaryOp = AddOp | SubOp | MulOp | DivOp deriving (Eq, Show)
 data MilValue   = BinaryOp BinaryOp MilValue MilValue

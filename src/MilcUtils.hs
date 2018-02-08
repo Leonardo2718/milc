@@ -32,6 +32,7 @@ import CompilerEnvironment
 
 import Data.List
 
+
 -- helper function for showing the first n elements of a list
 --
 -- If the list has more than n elements, then the first n are shown followed by

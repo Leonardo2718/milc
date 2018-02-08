@@ -26,6 +26,13 @@ License:
 
 module Main where
 
+-- local imports
+import CompilerEnvironment
+import MLexer
+import MRDParser
+import MIL
+import RSMGenerator
+
 -- system imports
 import System.Environment (getArgs)
 import System.Console.GetOpt
@@ -34,16 +41,6 @@ import Data.List
 import Data.Foldable
 import Control.Monad
 import System.FilePath.Posix
-
--- local imports
-import CompilerEnvironment
-import MLexer
-import MRDParser
-import MIL
-import RSMGenerator
-
-import Control.Monad.Writer
-import Control.Monad.Except
 
 
 -- option processing -----------------------------------------------------------
