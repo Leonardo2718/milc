@@ -163,8 +163,8 @@ genMilBasicBlocks lastTerminator stmt = do
             logMsgLn "-- generating condition expression"
             condition <- genMilValue expr
             logMsgLn $ show condition
-            case length elseBlocks of
-                1 -> do
+            case length elseBlocks == 1 && length (blockOpCodes . head $ elseBlocks) == 0 of
+                True -> do
                     logMsgLn "-- Else branch is empty (only contains final terminator)"
                     logMsgLn "-- generating Then branch with Fallthrough to merge point"
                     thenBlocks <- genMilBasicBlocks Fallthrough thenStmt

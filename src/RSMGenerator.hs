@@ -121,7 +121,9 @@ fromOpCode opcode = do
     logMsgLn $ "Generating code for OpCode: " ++ show opcode
     codes <- case opcode of
         InputOp name -> return [READ name]
-        WriteOp val -> fromMilValue val
+        WriteOp val -> do
+            codes <- fromMilValue val
+            return $ codes ++ [PRINT]
         Store name val -> do
             codes <- fromMilValue val
             return $ codes ++ [LOAD name]

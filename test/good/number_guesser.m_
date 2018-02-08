@@ -15,7 +15,7 @@ max := 100;
 % input min;
 % input max;
 
-interval := max - min + 1;
+interval := (max - min)/2 + 1;
 guess := max - interval;
 
 notCorrect := 1;
@@ -24,6 +24,8 @@ while notCorrect do
     begin
         write guess;
         input i;
+        interval := interval / 2;
+        if interval then begin end else interval := 1;   % if interval == 0 then interval = 1
 
         if i then   % if i != 0 then it should be either -1 or 1
             begin
@@ -43,8 +45,6 @@ while notCorrect do
                     begin
                         guess := guess - interval;
                     end;
-                interval := interval / 2;
-                if interval then begin end else interval := 1;   % if interval == 0 then interval = 1
             end
         else notCorrect := 0;   % if i == 0 then we found the number !
     end;

@@ -1,0 +1,9 @@
+begin
+
+input i;
+write i;
+
+if i then write 0
+     else write 1;
+
+end
