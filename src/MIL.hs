@@ -98,13 +98,13 @@ getBlockId = do
     put $ s{blockIdCounter=idCounter + 1}
     return idCounter
 
-runMilGenerator :: (AST -> MilGenerator a) -> AST -> CompilerMonad (a, MilGenState)
+runMilGenerator :: Monad m => (AST -> MilGenerator a) -> AST -> CompilerMonadT (a, MilGenState) m
 runMilGenerator ilgen ast = do
     let (c, s) = runState (runCompilerT . ilgen $ ast) (initMilGenState)
     a <- compiler c
     return (a, s)
 
-generateMil :: AST -> CompilerMonad (Mil, MilGenState)
+generateMil :: Monad m => AST -> CompilerMonadT (Mil, MilGenState) m
 generateMil ast = do
     logMsgLn "=== Running MIL generator ==="
     milgen@(Mil mil,_) <- runMilGenerator genMil ast

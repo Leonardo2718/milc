@@ -34,6 +34,13 @@ import MilcUtils
 import MIL
 
 import Data.List
+import System.IO
+import Control.Monad.IO.Class
+import System.FilePath.Posix
+
+import Control.Monad.Writer
+import Control.Monad.Except
+
 
 type Register = String
 data Label = Label Int deriving (Eq)
@@ -74,7 +81,7 @@ instance Show RSMCode where
 logRSMCode :: Monad m => [RSMOpCode] -> CompilerMonadT () m
 logRSMCode = logBlock . show . RSMCode -- do
 
-generateRSMCode :: Mil -> CompilerMonad RSMCode
+generateRSMCode :: Monad m => Mil -> CompilerMonadT RSMCode m
 generateRSMCode (Mil bbs) = do
     logMsgLn "=== Running code generation for RSM ==="
     logMsgLn "Generating code from MIL"
@@ -83,7 +90,7 @@ generateRSMCode (Mil bbs) = do
     logRSMCode . concat $ codes
     return . RSMCode . concat $ codes
 
-fromBasicBlock :: BasicBlock -> CompilerMonad [RSMOpCode]
+fromBasicBlock :: Monad m => BasicBlock -> CompilerMonadT [RSMOpCode] m
 fromBasicBlock bb@(BasicBlock bid opcodes terminator) = do
     logMsgLn "Generating code for BasicBlock"
     logMil [bb]
@@ -93,7 +100,7 @@ fromBasicBlock bb@(BasicBlock bid opcodes terminator) = do
     logRSMCode codes'
     return codes'
 
-fromTerminator :: Terminator -> CompilerMonad [RSMOpCode]
+fromTerminator :: Monad m => Terminator -> CompilerMonadT [RSMOpCode] m
 fromTerminator t = do
     logMsgLn $ "Generating code for Terminator: "  ++ show t
     codes <- case t of
@@ -113,7 +120,7 @@ fromTerminator t = do
     logRSMCode codes
     return codes
 
-fromOpCode :: OpCode -> CompilerMonad [RSMOpCode]
+fromOpCode :: Monad m =>  OpCode -> CompilerMonadT [RSMOpCode] m
 fromOpCode opcode = do
     logMsgLn $ "Generating code for OpCode: " ++ show opcode
     codes <- case opcode of
@@ -127,7 +134,7 @@ fromOpCode opcode = do
     logRSMCode codes
     return codes
 
-fromMilValue :: MilValue -> CompilerMonad [RSMOpCode]
+fromMilValue :: Monad m =>  MilValue -> CompilerMonadT [RSMOpCode] m
 fromMilValue val = do
     logMsgLn $ "Generating code from MilValue: " ++ show val
     codes <- case val of
@@ -145,3 +152,14 @@ fromBinaryOp AddOp = "+"
 fromBinaryOp SubOp = "-"
 fromBinaryOp MulOp = "*"
 fromBinaryOp DivOp = "/"
+
+type RSMFileEncoder a = CompilerMonadT a IO
+
+encodeRSMCode :: CompilerEnvironment -> RSMCode -> RSMFileEncoder ()
+encodeRSMCode env code = if envSourceFile env == ""
+    then liftIO $ encode stdout
+    else do
+        let outFile = replaceExtension (if envOutDir env == "" then (envSourceFile env) else replaceDirectory (envSourceFile env) (envOutDir env) ) "csh"
+        liftIO $ withFile outFile WriteMode encode
+    where
+        encode h = hPutStrLn h (show code)

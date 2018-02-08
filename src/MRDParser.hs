@@ -153,7 +153,7 @@ setLastParsedToken t = do
     s <- get
     put (s{lastParsedToken=t})
 
-runParser :: CompilerEnvironment -> Parser a -> [Token] -> CompilerMonad (a, ParserState)
+runParser :: Monad m => CompilerEnvironment -> Parser a -> [Token] -> CompilerMonadT (a, ParserState) m
 runParser env p ts = do
     let (c, s) = runState (runCompilerT p) (initParserState env ts)
     a <- compiler c
@@ -328,7 +328,7 @@ eatValueToken name extractor = do
 eatToken :: TokenType -> Parser ()
 eatToken tt = eatValueToken (show tt) (\tt' -> if tt == tt' then Just () else Nothing)
 
-parse :: CompilerEnvironment -> [Token] -> CompilerMonad (AST, ParserState)
+parse :: Monad m => CompilerEnvironment -> [Token] -> CompilerMonadT (AST, ParserState) m
 parse env ts = do
     logMsgLn "=== Running parser ==="
     p@(ast, _) <- runParser env parseProgram ts

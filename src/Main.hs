@@ -42,6 +42,10 @@ import MRDParser
 import MIL
 import RSMGenerator
 
+import Control.Monad.Writer
+import Control.Monad.Except
+
+
 -- option processing -----------------------------------------------------------
 
 -- data type for representing program (comand line) options
@@ -107,7 +111,7 @@ helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
 -- main program ----------------------------------------------------------------
 
 -- define steps of a compilation
-doCompilation :: CompilerEnvironment -> CompilerMonad RSMCode
+doCompilation :: Monad m => CompilerEnvironment -> CompilerMonadT RSMCode m
 doCompilation env = do
     logMsgLn $ concat ["======= Compiling ", source , " ======="]
     ts <- scan env . envSource $ env
@@ -122,61 +126,44 @@ doCompilation env = do
             f -> f
 
 -- run the different stages of the compiler (currently only lexer)
-compile :: CompilerEnvironment -> CompilerMonad RSMCode
+compile :: Monad m => CompilerEnvironment -> CompilerMonadT RSMCode m
 compile env = (doCompilation env) `catchCompError` handleCompError where
     handleCompError e = logError . concat $ ["\nCOMPILATION ERROR", atLocation, ":\n", e, "\n"]
     atLocation = case envSourceFile env of
         "" -> ""
         f  -> " in " ++ f
 
+execCompiler :: CompilerEnvironment -> CompilerMonadT () IO
+execCompiler env = (compile env >>= encodeRSMCode env) `catchError` (\ e -> liftIO $ hPutStrLn stderr e)
+
 -- compile a file (argument is path to the file)
-compileFile :: String -> IO (CompilerMonad RSMCode)
-compileFile f = do
-    s <- readFile f
-    return $ compile CompilerEnvironment {envSource = s, envSourceFile = f}
+compileFile2 :: String -> String -> CompilerMonadT () IO
+compileFile2 outDir f = do
+    s <- liftIO $ readFile f
+    execCompiler CompilerEnvironment {envSource = s, envSourceFile = f, envOutDir = outDir}
 
 -- compile multiple files, merging their compilation output together
-compileFiles :: [String] -> IO [CompilerMonad RSMCode]
-compileFiles = mapM compileFile
+compileFiles2 :: String -> [String] -> CompilerMonadT () IO
+compileFiles2 outDir = mapM_ $ compileFile2 outDir
 
 -- compile source from standard input
-compileStdIn :: IO (CompilerMonad RSMCode)
-compileStdIn = do
-    s <- getContents
-    return . compile $ CompilerEnvironment {envSource = s, envSourceFile = ""}
-
--- print the compilers' outputs and log
-printCompilerOutputs :: Show a => Options -> [CompilerMonad a] -> IO ()
-printCompilerOutputs options comps = if optStdOut options
-    then mapM_ (putStrLn . extractOutput . showCompilerOutput) comps
-    else mapM_ writeOutput (zip (optInFiles options) comps)
-    where
-        extractOutput o = case o of
-            Left e -> e
-            Right o' -> o'
-        writeOutput (s, c) = do
-            let outFile = replaceExtension (if optOutDir options == "" then s else replaceDirectory s (optOutDir options) ) "csh"
-            case showCompilerOutput c of
-                Left e -> putStrLn e
-                Right o -> writeFile outFile o
-printLogsAndOutputs :: Show a => Options -> [CompilerMonad a] -> IO ()
-printLogsAndOutputs options comps = do
-    printCompilerOutputs options comps
-    when (optLogFile options /= "") $ writeLogFile comps
-    where
-        writeLogFile cs = case cs of
-            [] -> return ()
-            c:cs -> writeLogFileWith writeFile c >> mapM_ (writeLogFileWith appendFile) cs
-        writeLogFileWith fileWriter c = fileWriter (optLogFile options) . showCompilerLog $ c
+compileStdIn2 :: CompilerMonadT () IO
+compileStdIn2 = do
+    s <- liftIO getContents
+    execCompiler CompilerEnvironment {envSource = s, envSourceFile = "", envOutDir=""}
 
 -- invoke action based on parsed command line options
 runMain :: Options -> IO ()
 runMain options
     | optHelp options           = putStrLn helpMessage
         -- print help message if options '-h' or '--help' where passed
-    | optStdIn options          = do c <- compileStdIn; printLogsAndOutputs options [c];
+    | optStdIn options          = do
+        (_, l) <- runCompilerT compileStdIn2
+        when (optLogFile options /= "") $ writeFile (optLogFile options) (concat l)
         -- force compilation of standard input
-    | otherwise                 = (compileFiles $ optInFiles options) >>= printLogsAndOutputs options
+    | otherwise                 = do
+        (_, l) <- runCompilerT (compileFiles2 (optOutDir options) (optInFiles options))
+        when (optLogFile options /= "") $ writeFile (optLogFile options) (concat l)
         -- compile all source files
 
 main :: IO ()

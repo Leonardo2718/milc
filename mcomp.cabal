@@ -83,7 +83,7 @@ executable mcomp
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:       base >=4.9 && <4.10, array, mtl >= 2.0, filepath
+  build-depends:       base >=4.9 && <4.10, array, mtl >= 2.0, filepath, transformers
 
   -- Directories containing source files.
   hs-source-dirs:      src

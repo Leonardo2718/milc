@@ -82,7 +82,7 @@ data AlexUserState = AlexUserState
 -- user state initializer
 alexInitUserState :: AlexUserState
 alexInitUserState = AlexUserState   { activeCommentStarts   = []
-                                    , compilerEnvironment   = CompilerEnvironment "" ""
+                                    , compilerEnvironment   = CompilerEnvironment "" "" ""
                                     }
 
 -- getters and setters of the user state
@@ -210,7 +210,7 @@ collectTokens = do
 
 -- helper function that scans a string and, if successful, returns a list of
 -- tokens, or emits an error otherwise
-scan :: CompilerEnvironment -> String -> CompilerMonad [Token]
+scan :: Monad m => CompilerEnvironment -> String -> CompilerMonadT [Token] m
 scan env str = do
     logMsgLn "=== Running lexical analysis ==="
     ts <- rewrap $ runAlex str (setCompilerEnvironment env >> collectTokens)
