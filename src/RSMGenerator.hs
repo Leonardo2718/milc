@@ -32,10 +32,10 @@ module RSMGenerator where
 import CompilerEnvironment
 import MilcUtils
 import MIL
+import MEncoder
 
 import Data.List
 import System.IO
-import System.FilePath.Posix
 
 
 type Register = String
@@ -73,6 +73,25 @@ instance Show RSMCode where
     show (RSMCode opcodes) = intercalate "\n" . map showWithPadding $ opcodes where
         showWithPadding l@(LABEL _) = show l
         showWithPadding op = "    " ++ show op
+
+instance TargetCode RSMCode where
+    encodeToFile code h = hPutStrLn h (cshHeader ++ show code) where
+        cshHeader = "#! /bin/csh \n\
+                    \\n\
+                    \# ... aliases for Robin's stack machine in csh. \n\
+                    \# This file should be \"sourced\" prior to executing \n\
+                    \# stack machine files. \n\
+                    \ \n\
+                    \set stack = \"\" \n\
+                    \alias cPUSH            'set stack = (\\!:1 $stack)' \n\
+                    \alias rPUSH            'set stack = ($\\!:1 $stack)' \n\
+                    \alias sPUSH            '@ stack[1] = $stack[1] + 1 ; set stack[1] = $stack[$stack[1]]' \n\
+                    \alias LOAD            'eval \"set \\!:1 = \\$stack[1] ; shift stack\"' \n\
+                    \alias OP2                'eval \"@ stack[2] = \\$stack[2] \\!:1 \\$stack[1]\"; shift stack' \n\
+                    \alias cJUMP           'set tos = $stack[1]; shift stack; if ($tos == 0) goto \\!:1' \n\
+                    \alias JUMP             goto \n\
+                    \alias PRINT            'echo $stack[1]; shift stack' \n\
+                    \alias READ            'eval \"set \\!:1 = $< \" ' \n\n"
 
 logRSMCode :: Monad m => [RSMOpCode] -> CompilerMonadT () m
 logRSMCode = logBlock . show . RSMCode -- do
@@ -148,14 +167,3 @@ fromBinaryOp AddOp = "+"
 fromBinaryOp SubOp = "-"
 fromBinaryOp MulOp = "*"
 fromBinaryOp DivOp = "/"
-
-type RSMFileEncoder a = CompilerMonadT a IO
-
-encodeRSMCode :: CompilerEnvironment -> RSMCode -> RSMFileEncoder ()
-encodeRSMCode env code = if envSourceFile env == ""
-    then liftIO $ encode stdout
-    else do
-        let outFile = replaceExtension (if envOutDir env == "" then (envSourceFile env) else replaceDirectory (envSourceFile env) (envOutDir env) ) "csh"
-        liftIO $ withFile outFile WriteMode encode
-    where
-        encode h = hPutStrLn h (show code)

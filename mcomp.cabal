@@ -77,13 +77,13 @@ executable mcomp
   Build-tools: alex, happy
 
   -- Modules included in this executable, other than Main.
-  other-modules: CompilerEnvironment MilcUtils MLexer MRDParser MIL RSMGenerator
+  other-modules: CompilerEnvironment MilcUtils MLexer MRDParser MIL MEncoder RSMGenerator
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:       base >=4.9 && <4.10, array, mtl >= 2.0, filepath, transformers
+  build-depends:       base >=4.9 && <4.10, array, mtl >= 2.0, filepath
 
   -- Directories containing source files.
   hs-source-dirs:      src

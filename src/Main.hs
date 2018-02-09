@@ -31,6 +31,7 @@ import CompilerEnvironment
 import MLexer
 import MRDParser
 import MIL
+import MEncoder
 import RSMGenerator
 
 -- system imports
@@ -40,7 +41,6 @@ import System.IO
 import Data.List
 import Data.Foldable
 import Control.Monad
-import System.FilePath.Posix
 
 
 -- option processing -----------------------------------------------------------
@@ -115,7 +115,7 @@ doCompilation env = do
     (ast, _) <- parse env ts
     (mil, _) <- generateMil ast
     targetCode <- generateRSMCode mil
-    encodeRSMCode env targetCode
+    writeEncodeTargetCode env targetCode
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"
     where
         source = case envSourceFile env of
