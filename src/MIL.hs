@@ -24,7 +24,7 @@ License:
 
 -}
 
-{- this module define mcomp's Intermediate Language: MIL -}
+{- this module define milc's Intermediate Language: MIL -}
 
 module MIL where
 

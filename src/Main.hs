@@ -69,7 +69,10 @@ defaultOptions = Options
 -- option transformation definition (changes option values based on command line arguments)
 optionTransforms :: [OptDescr (Options -> Options)]
 optionTransforms =
-    [ Option    [] ["stdout"]
+    [ Option    ['h'] ["help"]
+                (NoArg (\ opts -> opts {optHelp = True}) )
+                "display this help message"
+    , Option    [] ["stdout"]
                 (NoArg (\ opts -> opts {optStdOut = True}))
                 "print output to standard output"
     , Option    [] ["stdin"]
@@ -80,13 +83,10 @@ optionTransforms =
                 "put output files in directory DIRECTORY"
     , Option    ['l'] ["log"]
                 (OptArg (\ s opts -> opts {optLogFile = getLogFile s}) "FILE_NAME")
-                "generate log and write it to file FILE_NAME (mcomp.log if none specified)"
-    , Option    ['h'] ["help"]
-                (NoArg (\ opts -> opts {optHelp = True}) )
-                "display this help message"
+                "generate log and write it to file FILE_NAME (milc.log if none specified)"
     ] where
         getLogFile (Just f) = f
-        getLogFile Nothing  = "mcomp.log"
+        getLogFile Nothing  = "milc.log"
 
 -- option transformation application
 applyOptionTransforms :: [OptDescr (Options -> Options)] -> [String] -> Options -> Options
@@ -100,9 +100,13 @@ applyOptionTransforms transforms argv defaults = opts {optStdOut=newStdOut,optSt
 
 -- help message for the application
 helpMessage :: String
-helpMessage = usageInfo "Usage: mcomp [OPTIONS ...] [source_files ...]\n\n\
-                        \  Will compile the source Minisculus files. If no source files are provided,\n\
-                        \  contents of standard input will be compiled, upto EOF (Ctrl+D).\n\n\
+helpMessage = usageInfo "Usage: milc [OPTIONS ...] [source_files ...]\n\n\
+                        \  Will compile all source Minisculus files. If no source files are provided,\n\
+                        \  contents of standard input will be compiled, up to EOF (Ctrl+D). By default,\n\
+                        \  generated files will be put in the same directory as source files (or printed\n\
+                        \  to standard output if compiling from standard input). Use the `--outdir`\n\
+                        \  option to specify a different destination directory for all generated files.\n\
+                        \  All compilation errors are printed to standard error. \n\n\
                         \Options:" optionTransforms
 
 -- main program ----------------------------------------------------------------

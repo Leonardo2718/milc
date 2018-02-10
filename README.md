@@ -60,7 +60,7 @@ If you choose to use make instead of cabal, **make sure you have all required
 dependencies installed on your system**.
 
 By default, the Makefile will put all build output files in a directory called
-`make_build`. This can be changed by setting the `OUTPUT_DIR` variable to the
+`make_build/`. This can be changed by setting the `OUTPUT_DIR` variable to the
 desired path. To build, simply run `make`.
 
 ## Running
