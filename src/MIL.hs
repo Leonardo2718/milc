@@ -30,7 +30,7 @@ module MIL where
 
 import CompilerEnvironment
 import MilcUtils
-import MRDParser
+import MilcAST
 
 import Data.List
 import Control.Monad.State

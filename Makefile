@@ -26,7 +26,7 @@ OUTPUT_DIR ?= make_build
 SOURCE_DIR = src
 
 ALEX_SOURCE = MLexer.x
-HS_SOURCES = CompilerEnvironment.hs MilcUtils.hs MRDParser.hs MIL.hs MEncoder.hs RSMGenerator.hs Main.hs
+HS_SOURCES = CompilerEnvironment.hs MilcUtils.hs MilcAST.hs MRDParser.hs MIL.hs MEncoder.hs RSMGenerator.hs Main.hs
 
 ALEX_SOURCE_PATH = $(addprefix $(SOURCE_DIR)/,$(ALEX_SOURCE))
 HS_SOURCES_PATH = $(addprefix $(SOURCE_DIR)/,$(HS_SOURCES))
