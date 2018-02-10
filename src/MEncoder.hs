@@ -30,8 +30,6 @@ module MEncoder where
 
 import CompilerEnvironment
 
-import CompilerEnvironment
-
 import System.IO
 import System.FilePath.Posix
 

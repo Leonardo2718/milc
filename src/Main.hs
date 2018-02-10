@@ -30,7 +30,7 @@ module Main where
 import CompilerEnvironment
 import MLexer
 import MRDParser
-import MIL
+import MILGenerator
 import MEncoder
 import RSMGenerator
 
