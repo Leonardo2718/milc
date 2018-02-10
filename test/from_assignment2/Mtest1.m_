@@ -1,0 +1,8 @@
+
+begin
+
+   y:= 23;
+   x:= 13 + y;
+   write x;
+
+end

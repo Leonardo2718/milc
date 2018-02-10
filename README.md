@@ -91,7 +91,7 @@ will be placed in the same directory as the source files.
 The `tests/` directory contains some sample tests for the compiler. Tests are
 further divided into three sub-directories:
 
-- `test/from_assignment`: contains test files provided as part of the assignment
+- `test/from_assignment*`: contains tests provided as part of the assignments
 - `test/good`: contains "well-formed" test files that should compile successfully
 - `test/bad`: contains test files that should cause compilation failures
 
