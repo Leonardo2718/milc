@@ -25,7 +25,7 @@ License:
 
 -}
 
-{- This module implements a code generator for Robin's Stack Machine in csh -}
+{- This module implements a code generator for Robin's Stack Machine (RSM) in csh -}
 
 module RSMGenerator where
 
@@ -38,6 +38,7 @@ import Data.List
 import System.IO
 
 
+-- data type for srepresenting RSM code
 type Register = String
 data Label = Label Int deriving (Eq)
 data RSMOpCode  = CPUSH Int
@@ -53,6 +54,7 @@ data RSMOpCode  = CPUSH Int
                 deriving (Eq)
 data RSMCode = RSMCode [RSMOpCode] deriving (Eq)
 
+-- RSM data type instantiations
 instance Show Label where
     show (Label l) = "L" ++ show l
 
@@ -74,8 +76,11 @@ instance Show RSMCode where
         showWithPadding l@(LABEL _) = show l
         showWithPadding op = "    " ++ show op
 
+-- make RSMCode an instance of TargetCode so we can write it to a file easily
 instance TargetCode RSMCode where
     encodeToFile code h = hPutStrLn h (cshHeader ++ show code) where
+        -- this adds the csh implementation of RSM to the top of file so that
+        -- executing the generated code is as easy as sourceing the file
         cshHeader = "#! /bin/csh \n\
                     \\n\
                     \# ... aliases for Robin's stack machine in csh. \n\
@@ -83,19 +88,21 @@ instance TargetCode RSMCode where
                     \# stack machine files. \n\
                     \ \n\
                     \set stack = \"\" \n\
-                    \alias cPUSH            'set stack = (\\!:1 $stack)' \n\
-                    \alias rPUSH            'set stack = ($\\!:1 $stack)' \n\
-                    \alias sPUSH            '@ stack[1] = $stack[1] + 1 ; set stack[1] = $stack[$stack[1]]' \n\
+                    \alias cPUSH           'set stack = (\\!:1 $stack)' \n\
+                    \alias rPUSH           'set stack = ($\\!:1 $stack)' \n\
+                    \alias sPUSH           '@ stack[1] = $stack[1] + 1 ; set stack[1] = $stack[$stack[1]]' \n\
                     \alias LOAD            'eval \"set \\!:1 = \\$stack[1] ; shift stack\"' \n\
-                    \alias OP2                'eval \"@ stack[2] = \\$stack[2] \\!:1 \\$stack[1]\"; shift stack' \n\
+                    \alias OP2             'eval \"@ stack[2] = \\$stack[2] \\!:1 \\$stack[1]\"; shift stack' \n\
                     \alias cJUMP           'set tos = $stack[1]; shift stack; if ($tos == 0) goto \\!:1' \n\
                     \alias JUMP             goto \n\
-                    \alias PRINT            'echo $stack[1]; shift stack' \n\
+                    \alias PRINT           'echo $stack[1]; shift stack' \n\
                     \alias READ            'eval \"set \\!:1 = $< \" ' \n\n"
 
+-- helper for logging RSM code as a block
 logRSMCode :: Monad m => [RSMOpCode] -> CompilerMonadT () m
 logRSMCode = logBlock . show . RSMCode -- do
 
+-- start code generation from top level MIL code
 generateRSMCode :: Monad m => Mil -> CompilerMonadT RSMCode m
 generateRSMCode (Mil bbs) = do
     logMsgLn "=== Running code generation for RSM ==="
@@ -105,6 +112,7 @@ generateRSMCode (Mil bbs) = do
     logRSMCode . concat $ codes
     return . RSMCode . concat $ codes
 
+-- generate code from a basic block
 fromBasicBlock :: Monad m => BasicBlock -> CompilerMonadT [RSMOpCode] m
 fromBasicBlock bb@(BasicBlock bid opcodes terminator) = do
     logMsgLn "Generating code for BasicBlock"
@@ -115,6 +123,7 @@ fromBasicBlock bb@(BasicBlock bid opcodes terminator) = do
     logRSMCode codes'
     return codes'
 
+-- generate code from a terminator
 fromTerminator :: Monad m => Terminator -> CompilerMonadT [RSMOpCode] m
 fromTerminator t = do
     logMsgLn $ "Generating code for Terminator: "  ++ show t
@@ -135,6 +144,7 @@ fromTerminator t = do
     logRSMCode codes
     return codes
 
+-- generate code from a MIL opcode
 fromOpCode :: Monad m =>  OpCode -> CompilerMonadT [RSMOpCode] m
 fromOpCode opcode = do
     logMsgLn $ "Generating code for OpCode: " ++ show opcode
@@ -149,6 +159,7 @@ fromOpCode opcode = do
     logRSMCode codes
     return codes
 
+-- generate code from a MIL value
 fromMilValue :: Monad m =>  MilValue -> CompilerMonadT [RSMOpCode] m
 fromMilValue val = do
     logMsgLn $ "Generating code from MilValue: " ++ show val
@@ -162,6 +173,7 @@ fromMilValue val = do
     logRSMCode codes
     return codes
 
+-- return RSM operator for a MIL binary operator
 fromBinaryOp :: BinaryOp -> String
 fromBinaryOp AddOp = "+"
 fromBinaryOp SubOp = "-"

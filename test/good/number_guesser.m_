@@ -49,6 +49,6 @@ while notCorrect do
         else notCorrect := 0;   % if i == 0 then we found the number !
     end;
 
-%write guess;
+write guess;
 
 end

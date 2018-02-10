@@ -35,6 +35,7 @@ import CompilerEnvironment
 import System.IO
 import System.FilePath.Posix
 
+-- type class defining a generic interface for encoding generated target code
 class TargetCode c where
     writeEncodeTargetCode :: CompilerEnvironment -> c -> CompilerIOMonad ()
     writeEncodeTargetCode env code = if envSourceFile env == ""
