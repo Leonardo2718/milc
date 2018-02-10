@@ -212,11 +212,11 @@ genMilOpCode stmt = do
     opcode <- case stmt of
         Input name _ -> do
             logMsgLn "-- found Input statement"
-            return (InputOp name)
+            return (Read name)
         Write expr _ -> do
             logMsgLn "-- found Write statement"
             val <- genMilValue expr
-            return (WriteOp val)
+            return (Print val)
         Assign name expr _ -> do
             logMsgLn "-- found Assign statement"
             val <- genMilValue expr

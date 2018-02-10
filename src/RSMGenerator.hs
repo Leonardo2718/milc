@@ -1,4 +1,3 @@
-
 {-
 
 Copyright (C) 2018 Leonardo Banderali
@@ -149,8 +148,8 @@ fromOpCode :: Monad m =>  OpCode -> CompilerMonadT [RSMOpCode] m
 fromOpCode opcode = do
     logMsgLn $ "Generating code for OpCode: " ++ show opcode
     codes <- case opcode of
-        InputOp name -> return [READ name]
-        WriteOp val -> do
+        Read name -> return [READ name]
+        Print val -> do
             codes <- fromMilValue val
             return $ codes ++ [PRINT]
         Store name val -> do

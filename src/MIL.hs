@@ -47,8 +47,8 @@ data MilValue   = BinaryOp BinaryOp MilValue MilValue   -- result of binary oper
                 deriving (Eq, Show)
 
 -- MIL opcodes
-data OpCode = InputOp Symbol
-            | WriteOp MilValue
+data OpCode = Read Symbol
+            | Print MilValue
             | Store Symbol MilValue
             | Call Symbol [MilValue]
             deriving (Eq, Show)
