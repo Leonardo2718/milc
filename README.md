@@ -10,31 +10,31 @@ Some note-worthy features include:
 - can read source from multiple files or standard input
 - recognizes nested multi-line comments
 - reports missing `*/` for each level of un-closed nested comment
-- gives single-line comments higher precedence than multi-line comments
+- gives single-line comments higher precedence over multi-line comments
 - reports line and column number of errors
 - reports file containing the reported error (if not reading from standard input)
 - shows source code line(s) where an error is found
+- generates self-contained csh scripts as target
 - uses an expressive intermediate language called MIL
-- can generate detailed logs files of compilations (use `-l` option)
+- can generate detailed log files of compilations (use `-l` option)
 - supports various command line options (use `--help` for more details)
 
 ## Dependencies
 
 Milc has the following dependencies:
 
-- Alex *(build time only)*
-- array
-- mtl (version 2.0 or greater)
-- filepath
+- [Alex *(build time only)*](http://hackage.haskell.org/package/alex)
+- [array](http://hackage.haskell.org/package/array)
+- [mtl (version 2.0 or greater)](http://hackage.haskell.org/package/mtl)
+- [filepath](http://hackage.haskell.org/package/filepath)
 
 ## Building
 
 There are two ways of building Milc, both of which generate an executable called
-`milc`. The (*highly*) recommended was is to use cabal as it will take care of
-checking the correct dependencies are installed. Alternatively, a Makefile is
-also provided.
+`milc`. The (*highly*) recommended way is to use `cabal` as it will take care of
+handling all package dependencies. Alternatively, a Makefile is also provided.
 
-### Using cabal
+### Using `cabal`
 
 This is the recommended way of building `milc`. You may *optionally* create a
 cabal sandbox and install all dependencies inside it:
@@ -44,7 +44,7 @@ $ cabal sandbox init
 $ cabal install --dependencies-only
 ```
 
-To build the package, run:
+To build `milc`, run:
 
 ```
 $ cabal configure
@@ -54,19 +54,19 @@ $ cabal build
 This will produce a directory called `dist/` that contains all build outputs,
 including the `milc` executable (`dist/build/milc/milc`).
 
-### Using make
+### Using `make`
 
-If you choose to use make instead of cabal, **make sure you have all required
-dependencies installed on your system**.
+If you choose to use `make` instead of `cabal`, **make sure you have all the
+required dependencies installed on your system**.
 
-By default, the Makefile will put all build output files in a directory called
-`make_build/`. This can be changed by setting the `OUTPUT_DIR` variable to the
-desired path. To build, simply run `make`.
+By default, the Makefile will put all build outputs in a directory called
+`make_build/`. This can be changed by setting the `OUTPUT_DIR` environment
+variable to the desired path. To build, simply run `make`.
 
 ## Running
 
 The format for invoking the compiler is `milc [OPTIONS] [SOURCES]`.
-`cabal run --` may also be used to run the compiled (make sure all `milc`
+`cabal run --` may also be used to invoke `milc` (make sure all `milc` specific
 command line options go after the `--`). If no source files are provided, `milc`
 will read source code from standard input up-to EOF (`Ctrl+D` on most systems).
 For a complete list of available command line options, use the `--help` option:
@@ -88,8 +88,8 @@ will be placed in the same directory as the source files.
 
 ## Tests
 
-The `tests/` directory contains some sample tests for the compiler. Tests are
-further divided into three sub-directories:
+The `test/` directory contains some sample tests for the compiler. Tests are
+organized in several sub-directories:
 
 - `test/from_assignment*`: contains tests provided as part of the assignments
 - `test/good`: contains "well-formed" test files that should compile successfully
