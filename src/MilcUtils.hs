@@ -64,3 +64,7 @@ logBlock msg = do
 -- helper for putting the first n lines of a log message in a block
 logBlockLines :: Monad m => Int -> String -> CompilerMonadT () m
 logBlockLines n = logBlock . showFirstLines n
+
+concat2WithPadding :: Int -> String -> String -> String
+concat2WithPadding n a b = concat [a, padding, b] where
+    padding = take (n - length a) (repeat ' ')

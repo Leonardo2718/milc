@@ -45,9 +45,9 @@ class AbstractSyntaxTree a where
     -- returns string representation of an AST sub-tree
     showTree :: String -> a -> String
     showTree lead ast = intercalate "\n" (showAllTrees lead ast) where
-        showAllTrees l t = concat [l, name, posPadding, "(", showAlexPos (positionOf t), ")"] : showSubTrees l' t where
+        showAllTrees l t = (l ++ concat2WithPadding 20 name pos) : showSubTrees l' t where
+            pos = concat ["(", showAlexPos (positionOf t), ")"]
             name = nameOf t
-            posPadding = take (20 - length name) (repeat ' ')
             l' = ' ':' ':l
 
 -- type of the AST root node

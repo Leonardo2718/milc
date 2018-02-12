@@ -33,6 +33,7 @@ import MRDParser
 import MILGenerator
 import MEncoder
 import RSMGenerator
+import MilcCFG
 
 -- system imports
 import System.Environment (getArgs)

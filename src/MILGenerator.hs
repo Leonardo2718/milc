@@ -90,7 +90,7 @@ setBlockTerminator terminator (BasicBlock bbId opcodes _) = BasicBlock bbId opco
 genMil :: AST -> MilGenerator Mil
 genMil ast@(AST _ stmt) = do
     logMsgLn "Walking AST: Generating MIL for top level statement"
-    blocks <- genMilBasicBlocks Exit stmt
+    blocks <- genMilBasicBlocks (Return Nothing) stmt
     return $ Mil blocks
 
 -- generate a list of basic blocks from an AST statement node

@@ -61,7 +61,7 @@ data Terminator = Jump {jumpTarget :: BlockId}
                 | Branch {jumpCondition :: MilValue, jumpTarget :: BlockId}
                 | BranchZero {jumpCondition :: MilValue, jumpTarget :: BlockId}
                 | Fallthrough
-                | Exit
+                | Return {returnValue :: Maybe MilValue}
                 deriving (Eq, Show)
 
 -- MIL basic block representation

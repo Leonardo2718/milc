@@ -32,6 +32,7 @@ import CompilerEnvironment
 import MilcUtils
 import MIL
 import MEncoder
+import MilcCFG
 
 import Data.List
 import System.IO
@@ -103,22 +104,37 @@ logRSMCode = logBlock . show . RSMCode -- do
 
 -- start code generation from top level MIL code
 generateRSMCode :: Monad m => Mil -> CompilerMonadT RSMCode m
-generateRSMCode (Mil bbs) = do
+generateRSMCode mil@(Mil bbs) = do
     logMsgLn "=== Running code generation for RSM ==="
+    logMsgLn "Building CFG"
+    cfg <- buildCFG mil
+    logCFG cfg
     logMsgLn "Generating code from MIL"
-    codes <- mapM fromBasicBlock bbs
+    codes <- mapM (fromBasicBlock cfg) bbs
     logMsgLn "Code generation successful"
     logRSMCode . concat $ codes
     return . RSMCode . concat $ codes
 
 -- generate code from a basic block
-fromBasicBlock :: Monad m => BasicBlock -> CompilerMonadT [RSMOpCode] m
-fromBasicBlock bb@(BasicBlock bid opcodes terminator) = do
+fromBasicBlock :: Monad m => CFG -> BasicBlock -> CompilerMonadT [RSMOpCode] m
+fromBasicBlock cfg bb@(BasicBlock bid opcodes terminator) = do
     logMsgLn "Generating code for BasicBlock"
     logMil [bb]
+    ins <- incomingEdgesOf bb cfg
+    logMsgLn ("-- incoming edges are: " ++ show ins)
+    let isBranchJumpTarget = case ins of
+            [IncomingFallthrough _] -> False
+            [Start] -> False
+            _ -> True
+    case isBranchJumpTarget of
+        True -> logMsgLn "   block is target of branch/jump: will generated label"
+        False -> logMsgLn "   block is not target of branch/jump: won't generated label"
     codes <- mapM fromOpCode opcodes
     term <- fromTerminator terminator
-    let codes' = LABEL (Label bid) : (concat codes) ++ term
+    let codes' = if isBranchJumpTarget
+            -- only need to generate a label if block is target of a branch/jump
+            then LABEL (Label bid) : (concat codes) ++ term
+            else (concat codes) ++ term
     logRSMCode codes'
     return codes'
 
@@ -134,10 +150,10 @@ fromTerminator t = do
             codes <- fromMilValue val
             return $ codes ++ [CJUMP (Label target)]
         Fallthrough -> do
-            logMsgLn "-- No need to generate anything for Fallthrough"
+            logMsgLn "-- no need to generate anything for Fallthrough"
             return []
-        Exit -> do
-            logMsgLn "-- No need to generate anything for Exit"
+        Return _ -> do
+            logMsgLn "-- no need to generate anything for Return"
             return []
         _ -> logError $ "Unrecognized terminator: " ++ show t
     logRSMCode codes
