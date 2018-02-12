@@ -106,17 +106,11 @@ logMilLines n = logBlockLines n . showMil
 --
 -- Given two basic blocks:
 --
---      +------------------------+
---      | BasicBlock_1           |
---      | opcodes_1              |
---      | terminator_1           |
---      +------------------------+
---                  |
---      +------------------------+
---      | BasicBlock_2           |
---      | opcodes_2              |
---      | terminator_2           |
---      +------------------------+
+--      +--------------+     +--------------+
+--      | BasicBlock_1 |     | BasicBlock_2 |
+--      | opcodes_1    |---->| opcodes_2    |
+--      | terminator_1 |     | terminator_2 |
+--      +--------------+     +--------------+
 --
 -- the correct way of merging them is to create a new block with:
 --  * the same ID as the first block
