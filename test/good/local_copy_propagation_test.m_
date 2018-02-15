@@ -1,0 +1,9 @@
+begin
+
+a := 1;
+b := a + 1;
+c := b + a;
+d := c + 1;
+write d;
+
+end
