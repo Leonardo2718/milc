@@ -33,11 +33,16 @@ import MilcUtils
 import MIL
 import MilcCFG
 
+import Data.HashMap.Strict as HashMap
+import Control.Monad.State
+
 -- run various optimizations
 optimize :: Monad m => Mil -> CompilerMonadT Mil m
 optimize mil = do
     logMsgLn "=== Running Optimizations ==="
     basicBlockMerging mil >>= constantFolding
+                          >>= localCopyPropagation
+                          >>= constantFolding
 
 -- merge all basic blocks that can be safely merged
 basicBlockMerging :: Monad m => Mil -> CompilerMonadT Mil m
@@ -110,7 +115,7 @@ constantFolding mil@(Mil bbs) = do
                 BinaryOp MulOp (Const 1) rhs -> return rhs
                 BinaryOp MulOp lhs (Const 1) -> return lhs
                 BinaryOp DivOp lhs (Const 1) -> return lhs
-                v@(BinaryOp DivOp _ (Const 0)) -> return v
+                BinaryOp DivOp _ (Const 0) -> return val
                 BinaryOp MulOp (Const 0) _ -> return $ Const 0
                 BinaryOp MulOp _ (Const 0) -> return $ Const 0
                 BinaryOp DivOp (Const 0) _ -> return $ Const 0
@@ -118,6 +123,77 @@ constantFolding mil@(Mil bbs) = do
                 BinaryOp SubOp (Const a) (Const b) -> return $ Const (a - b)
                 BinaryOp MulOp (Const a) (Const b) -> return $ Const (a * b)
                 BinaryOp DivOp (Const a) (Const b) -> return $ Const (a `div` b)
-                v -> return v
+                _ -> return val
             logMsgLn (concat2WithPadding 12 "-- into:" (show val'))
             return val'
+
+-- state for local copy propagation
+data LocalCopyPropagationState = LocalCopyPropagationState { copyTable :: HashMap Symbol MilValue }
+type LocalCopyPropagationStateMonad = State LocalCopyPropagationState
+type LocalCopyPropagation a = CompilerMonadT a LocalCopyPropagationStateMonad
+
+-- execute local copy propagation and unwrap the state monad
+localCopyPropagation :: Monad m => Mil -> CompilerMonadT Mil m
+localCopyPropagation mil = do
+    let (a, s) = runState (runCompilerT (doLocalCopyPropagaion mil)) (LocalCopyPropagationState HashMap.empty)
+    mil' <- compiler a
+    return mil'
+
+-- execute local copy propagation
+doLocalCopyPropagaion :: Mil -> LocalCopyPropagation Mil
+doLocalCopyPropagaion mil@(Mil bbs) = do
+    logMsgLn "Performing: Local Copy Propagation"
+    bbs' <- mapM propagateCopies bbs
+    return $ Mil bbs'
+    where
+        propagateCopies :: BasicBlock -> LocalCopyPropagation BasicBlock
+        propagateCopies (BasicBlock bbid opcodes t) = do
+            logMsgLn ("-- propagating copies in basic block " ++ show bbid)
+            opcodes' <- propagateInOpCode opcodes
+            return $ BasicBlock bbid opcodes' t
+        propagateInOpCode :: [OpCode] -> LocalCopyPropagation [OpCode]
+        propagateInOpCode (op:ops) = do
+            logMsgLn ("-- propagating copies in opcode: " ++ show op)
+            op' <- case op of
+                Store sym val@(Const _) -> do
+                    addCopy sym val
+                    return op
+                Store sym val -> do
+                    val' <- propagateInValue val
+                    addCopy sym val'
+                    logMsgLn $ concat ["-- added ", sym, " as a copy of ", show val]
+                    return $ Store sym val'
+                Print val -> do
+                    val' <- propagateInValue val
+                    return $ Print val'
+                _ -> return op
+            logMsgLn ("-- opcode after copy propagation: " ++ show op')
+            ops' <- propagateInOpCode ops
+            return $ op':ops'
+        propagateInOpCode [] = return []
+        propagateInValue :: MilValue -> LocalCopyPropagation MilValue
+        propagateInValue val = do
+            logMsgLn ("-- propagating copies in: " ++ show val)
+            case val of
+                BinaryOp op lhs rhs -> do
+                    lhs' <- propagateInValue lhs
+                    rhs' <- propagateInValue rhs
+                    return $ BinaryOp op lhs' rhs'
+                Load sym -> do
+                    v <- tableLookup sym
+                    case v of
+                        Just v' -> return v'
+                        Nothing -> return val
+                _ -> return val
+        addCopy :: Symbol -> MilValue -> LocalCopyPropagation ()
+        addCopy sym val = do
+            s <- get
+            let t = copyTable s
+                t' = HashMap.insert sym val t
+            put s{copyTable=t'}
+        tableLookup :: Symbol -> LocalCopyPropagation (Maybe MilValue)
+        tableLookup sym = do
+            s <- get
+            let t = copyTable s
+                v = HashMap.lookup sym t
+            return v
