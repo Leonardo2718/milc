@@ -33,7 +33,7 @@ import MRDParser
 import MILGenerator
 import MEncoder
 import RSMGenerator
-import MilcCFG
+import MilcOptimizer
 
 -- system imports
 import System.Environment (getArgs)
@@ -51,6 +51,7 @@ data Options = Options
     { optInFiles        :: [String] -- list of source files to compile
     , optStdOut         :: Bool     -- print ouput to standard output
     , optStdIn          :: Bool     -- read source from std input
+    , optOptLevel       :: Int      -- optimization level
     , optOutDir         :: String   -- path to output directory
     , optLogFile        :: String
     , optHelp           :: Bool     -- display usage information
@@ -62,6 +63,7 @@ defaultOptions = Options
     { optInFiles = []
     , optStdOut = False
     , optStdIn = False
+    , optOptLevel = 1
     , optOutDir = ""
     , optLogFile = ""
     , optHelp = False
@@ -79,6 +81,9 @@ optionTransforms =
     , Option    [] ["stdin"]
                 (NoArg (\ opts -> opts {optStdIn = True, optStdOut = True}) )
                 "read source from standard input (implies --stdout)"
+    , Option    ['O'] []
+                (ReqArg (\ s opts -> opts {optOptLevel = read s}) "LEVEL")
+                "set the optimization level (0 means no optimizations)"
     , Option    ['d'] ["outdir"]
                 (ReqArg (\ s opts -> opts {optOutDir = s}) "DIRECTORY")
                 "put output files in directory DIRECTORY"
@@ -107,7 +112,9 @@ helpMessage = usageInfo "Usage: milc [OPTIONS ...] [source_files ...]\n\n\
                         \  generated files will be put in the same directory as source files (or printed\n\
                         \  to standard output if compiling from standard input). Use the `--outdir`\n\
                         \  option to specify a different destination directory for all generated files.\n\
-                        \  All compilation errors are printed to standard error. \n\n\
+                        \  By default, milc will perform optimizations at level 1 (only level available).\n\
+                        \  Use `-O0` to disable optimizaitons. All compilation errors are printed \n\
+                        \  to standard error. \n\n\
                         \Options:" optionTransforms
 
 -- main program ----------------------------------------------------------------
@@ -119,7 +126,10 @@ doCompilation env = do
     ts <- scan env . envSource $ env
     (ast, _) <- parse env ts
     (mil, _) <- generateMil ast
-    targetCode <- generateRSMCode mil
+    optMil <- case envOptLevel env of
+        0 -> return mil
+        _ -> optimize mil
+    targetCode <- generateRSMCode optMil
     writeEncodeTargetCode env targetCode
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"
     where
@@ -128,10 +138,10 @@ doCompilation env = do
             f -> f
 
 -- compile source from standard input
-compileStdIn :: CompilerMonadT () IO
-compileStdIn = do
+compileStdIn :: Options -> CompilerMonadT () IO
+compileStdIn options = do
     s <- liftIO getContents
-    compile CompilerEnvironment {envSource = s, envSourceFile = "", envOutDir=""}
+    compile CompilerEnvironment {envSource = s, envSourceFile = "", envOutDir="", envOptLevel = optOptLevel options}
 
 -- run the different stages of the compiler (currently only lexer)
 compile :: CompilerEnvironment -> CompilerMonadT () IO
@@ -145,14 +155,14 @@ compile env = (doCompilation env) `catchCompError` handleCompError where
         f  -> " in " ++ f
 
 -- compile a file (argument is path to the file)
-compileFile :: String -> String -> CompilerMonadT () IO
-compileFile outDir f = do
+compileFile :: Options -> String -> String -> CompilerMonadT () IO
+compileFile options outDir f = do
     s <- liftIO $ readFile f
-    compile CompilerEnvironment {envSource = s, envSourceFile = f, envOutDir = outDir}
+    compile CompilerEnvironment {envSource = s, envSourceFile = f, envOutDir = outDir, envOptLevel = optOptLevel options}
 
 -- compile multiple files, merging their compilation output together
-compileFiles :: String -> [String] -> CompilerMonadT () IO
-compileFiles outDir = mapM_ $ compileFile outDir
+compileFiles :: Options -> String -> [String] -> CompilerMonadT () IO
+compileFiles options outDir = mapM_ $ compileFile options outDir
 
 -- invoke action based on parsed command line options
 runMain :: Options -> IO ()
@@ -160,8 +170,8 @@ runMain options = if optHelp options
     then putStrLn helpMessage   -- print help message
     else do                     -- compile all source files
         let comp = if optStdIn options
-            then compileStdIn
-            else compileFiles (optOutDir options) (optInFiles options)
+            then compileStdIn options
+            else compileFiles options (optOutDir options) (optInFiles options)
         (_, l) <- runCompilerT comp
         when (optLogFile options /= "") $ writeFile (optLogFile options) (concat l)
 

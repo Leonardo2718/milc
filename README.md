@@ -16,6 +16,7 @@ Some note-worthy features include:
 - shows source code line(s) where an error is found
 - generates self-contained csh scripts as target
 - uses an expressive intermediate language called MIL
+- can do a few simple optimizations
 - can generate detailed log files of compilations (use `-l` option)
 - supports various command line options (use `--help` for more details)
 
@@ -27,6 +28,7 @@ Milc has the following dependencies:
 - [array](http://hackage.haskell.org/package/array)
 - [mtl (version 2.0 or greater)](http://hackage.haskell.org/package/mtl)
 - [filepath](http://hackage.haskell.org/package/filepath)
+- [unordered-containers (version 0.2.7.0 or greater)](http://hackage.haskell.org/package/unordered-containers)
 
 ## Building
 
@@ -85,6 +87,9 @@ $ cabal run -- test/good/* -d out
 This will compile all the test programs in `test/good/` and put all output files
 in the `out/` directory. If no output directory is specified, the output files
 will be placed in the same directory as the source files.
+
+Note: the optimizer will run by default! So generated code may be simpler than
+expected. Use `-O0` to disable all optimizations
 
 ## Tests
 

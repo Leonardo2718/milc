@@ -39,6 +39,7 @@ data CompilerEnvironment = CompilerEnvironment
     { envSource      :: String   -- the actual source code being compiled
     , envSourceFile  :: String   -- path to the file containing the source code (empty if using stdin)
     , envOutDir      :: String   -- path to directory where all output files should go
+    , envOptLevel    :: Int      -- the optimization level
     }
 
 -- monad for managing compiler log and errors

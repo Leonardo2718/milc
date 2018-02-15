@@ -169,5 +169,5 @@ canMergeSafely bb1 bb2 cfg = do
     in2 <- incomingEdgesOf bb2 cfg
     return $ isSafe out1 in2
     where
-        isSafe [OutgoingFallthrough target] [IncomingFallthrough source] = target == source
+        isSafe [OutgoingFallthrough target] [IncomingFallthrough source] = source == blockId bb1 && target == blockId bb2
         isSafe _ _ = False

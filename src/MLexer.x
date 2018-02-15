@@ -82,7 +82,7 @@ data AlexUserState = AlexUserState
 -- user state initializer
 alexInitUserState :: AlexUserState
 alexInitUserState = AlexUserState   { activeCommentStarts   = []
-                                    , compilerEnvironment   = CompilerEnvironment "" "" ""
+                                    , compilerEnvironment   = CompilerEnvironment "" "" "" 1
                                     }
 
 -- getters and setters of the user state

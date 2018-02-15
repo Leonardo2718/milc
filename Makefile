@@ -31,6 +31,8 @@ HS_SOURCES = \
 	MilcUtils.hs MilcAST.hs \
 	MRDParser.hs \
 	MIL.hs \
+	MilcCFG.hs \
+	MilcOptimizer.hs \
 	MILGenerator.hs \
 	MEncoder.hs \
 	RSMGenerator.hs \
