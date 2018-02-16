@@ -47,17 +47,17 @@ optimize mil = do
 -- merge all basic blocks that can be safely merged
 basicBlockMerging :: Monad m => Mil -> CompilerMonadT Mil m
 basicBlockMerging mil@(Mil bbs) = do
-    logMsgLn "Performing: Basic Block Merging"
-    logMsgLn "-- building CFG"
-    cfg <- buildCFG mil
-    logCFG cfg
-    bbs' <- mergeBlocks cfg bbs
+    logMsgLn "%%%% Performing: Basic Block Merging %%%%"
+    bbs' <- mergeBlocks bbs
     logMsgLn "-- resulting MIL"
     logMil bbs'
     return (Mil bbs')
     where
-        mergeBlocks :: Monad m => CFG -> [BasicBlock] -> CompilerMonadT [BasicBlock] m
-        mergeBlocks cfg (bb1:bb2:bbs) = do
+        mergeBlocks :: Monad m => [BasicBlock] -> CompilerMonadT [BasicBlock] m
+        mergeBlocks (bb1:bb2:bbs) = do
+            logMsgLn "-- building CFG"
+            cfg <- buildCFG mil
+            logCFG cfg
             safeMergePossible <- canMergeSafely bb1 bb2 cfg
             case safeMergePossible of
                 True -> do
@@ -66,16 +66,16 @@ basicBlockMerging mil@(Mil bbs) = do
                     logMsgLn ("   " ++ concat2WithPadding 3 (show (blockId bb1)) (" out " ++ show bb1outs))
                     bb2ins <- incomingEdgesOf bb2 cfg
                     logMsgLn ("   " ++ concat2WithPadding 3 (show (blockId bb2)) (" in  " ++ show bb2ins))
-                    mergeBlocks cfg (mergeBasicBlocks bb1 bb2:bbs)
+                    mergeBlocks (mergeBasicBlocks bb1 bb2:bbs)
                 False -> do
-                    bbs' <- mergeBlocks cfg (bb2:bbs)
+                    bbs' <- mergeBlocks (bb2:bbs)
                     return (bb1:bbs')
-        mergeBlocks _ bbs = return bbs
+        mergeBlocks bbs = return bbs
 
 -- fold sub-expressions that only involve constants
 constantFolding :: Monad m => Mil -> CompilerMonadT Mil m
 constantFolding mil@(Mil bbs) = do
-    logMsgLn "Performing: Constant Folding"
+    logMsgLn "%%%% Performing: Constant Folding %%%%"
     bbs' <- mapM foldInBlock bbs
     return (Mil bbs')
     where
@@ -124,7 +124,7 @@ constantFolding mil@(Mil bbs) = do
                 BinaryOp MulOp (Const a) (Const b) -> return $ Const (a * b)
                 BinaryOp DivOp (Const a) (Const b) -> return $ Const (a `div` b)
                 _ -> return val
-            logMsgLn (concat2WithPadding 12 "-- into:" (show val'))
+            logMsgLn (concat2WithPadding 12 "   into:" (show val'))
             return val'
 
 -- state for local copy propagation
@@ -142,7 +142,7 @@ localCopyPropagation mil = do
 -- execute local copy propagation
 doLocalCopyPropagaion :: Mil -> LocalCopyPropagation Mil
 doLocalCopyPropagaion mil@(Mil bbs) = do
-    logMsgLn "Performing: Local Copy Propagation"
+    logMsgLn "%%%% Performing: Local Copy Propagation %%%%"
     bbs' <- mapM propagateCopies bbs
     return $ Mil bbs'
     where
