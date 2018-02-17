@@ -63,7 +63,7 @@ defaultOptions = Options
     { optInFiles = []
     , optStdOut = False
     , optStdIn = False
-    , optOptLevel = 1
+    , optOptLevel = 0
     , optOutDir = ""
     , optLogFile = ""
     , optHelp = False
@@ -75,9 +75,9 @@ optionTransforms =
     [ Option    ['h'] ["help"]
                 (NoArg (\ opts -> opts {optHelp = True}) )
                 "display this help message"
-    , Option    [] ["stdout"]
-                (NoArg (\ opts -> opts {optStdOut = True}))
-                "print output to standard output"
+    -- , Option    [] ["stdout"]
+    --             (NoArg (\ opts -> opts {optStdOut = True}))
+    --             "print output to standard output"
     , Option    [] ["stdin"]
                 (NoArg (\ opts -> opts {optStdIn = True, optStdOut = True}) )
                 "read source from standard input (implies --stdout)"
@@ -112,9 +112,8 @@ helpMessage = usageInfo "Usage: milc [OPTIONS ...] [source_files ...]\n\n\
                         \  generated files will be put in the same directory as source files (or printed\n\
                         \  to standard output if compiling from standard input). Use the `--outdir`\n\
                         \  option to specify a different destination directory for all generated files.\n\
-                        \  By default, milc will perform optimizations at level 1 (only level available).\n\
-                        \  Use `-O0` to disable optimizaitons. All compilation errors are printed \n\
-                        \  to standard error. \n\n\
+                        \  By default, milc will perform no optimizations. Use the option `-O1` to\n\
+                        \  enable optimizations. All compilation errors are printed to standard error. \n\n\
                         \Options:" optionTransforms
 
 -- main program ----------------------------------------------------------------

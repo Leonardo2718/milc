@@ -16,7 +16,7 @@ Some note-worthy features include:
 - shows source code line(s) where an error is found
 - generates self-contained csh scripts as target
 - uses an expressive intermediate language called MIL
-- can do a few simple optimizations
+- can do a few simple optimizations (enabled using `-O1`)
 - can generate detailed log files of compilations (use `-l` option)
 - supports various command line options (use `--help` for more details)
 
@@ -81,15 +81,11 @@ To compile some example files, run:
 
 ```
 $ mkdir out
-$ cabal run -- test/good/* -d out
+$ cabal run -- test/good/* -d out -l
 ```
 
 This will compile all the test programs in `test/good/` and put all output files
-in the `out/` directory. If no output directory is specified, the output files
-will be placed in the same directory as the source files.
-
-Note: the optimizer will run by default! So generated code may be simpler than
-expected. Use `-O0` to disable all optimizations
+in the `out/` directory. It will also generate a log file called `milc.log`.
 
 ## Tests
 
