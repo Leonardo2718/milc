@@ -59,16 +59,18 @@ optimize mil = do
 basicBlockMerging :: Monad m => Mil -> CompilerMonadT Mil m
 basicBlockMerging mil@(Mil bbs) = do
     logMsgLn "%%%% Performing: Basic Block Merging %%%%"
-    bbs' <- mergeBlocks bbs
+    logMsgLn "-- building CFG"
+    cfg <- buildCFG mil
+    logCFG cfg
+    bbs' <- mergeBlocks cfg bbs
     logMsgLn "-- resulting MIL"
     logMil bbs'
     return (Mil bbs')
     where
-        mergeBlocks :: Monad m => [BasicBlock] -> CompilerMonadT [BasicBlock] m
-        mergeBlocks (bb1:bb2:bbs) = do
-            logMsgLn "-- building CFG"
-            cfg <- buildCFG mil
-            logCFG cfg
+        mergeBlocks :: Monad m => CFG -> [BasicBlock] -> CompilerMonadT [BasicBlock] m
+        mergeBlocks _ [bb] = return [bb]
+        mergeBlocks cfg (bb1:bbs) = do
+            bb2:bbs' <- mergeBlocks cfg bbs
             safeMergePossible <- canMergeSafely bb1 bb2 cfg
             case safeMergePossible of
                 True -> do
@@ -77,11 +79,8 @@ basicBlockMerging mil@(Mil bbs) = do
                     logMsgLn ("   " ++ concat2WithPadding 3 (show (blockId bb1)) (" out " ++ show bb1outs))
                     bb2ins <- incomingEdgesOf bb2 cfg
                     logMsgLn ("   " ++ concat2WithPadding 3 (show (blockId bb2)) (" in  " ++ show bb2ins))
-                    mergeBlocks (mergeBasicBlocks bb1 bb2:bbs)
-                False -> do
-                    bbs' <- mergeBlocks (bb2:bbs)
-                    return (bb1:bbs')
-        mergeBlocks bbs = return bbs
+                    return $ mergeBasicBlocks bb1 bb2 : bbs'
+                False -> return $ bb1:bb2:bbs'
 
 -- state for local copy propagation
 --
