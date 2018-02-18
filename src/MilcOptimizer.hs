@@ -107,8 +107,13 @@ localValueSimplification mil = do
         doValueSimplification :: Mil -> LocalValueSimplification Mil
         doValueSimplification mil@(Mil bbs) = do
             logMsgLn "%%%% Performing: Local Value Simplification %%%%"
-            bbs' <- mapM simplifyInBlock bbs
+            bbs' <- mapM (\bb -> simplifyInBlock bb >>= forwardAnd resetCopyTable) bbs
             return $ Mil bbs'
+
+        -- given an empty CompilerMonad action, turns it into a function that
+        -- takes some value and simply forwards it
+        forwardAnd :: Monad m => CompilerMonadT () m -> a -> CompilerMonadT a m
+        forwardAnd c a = c >> return a
 
         -- just simplify values in the contained opcodes and the terminator
         simplifyInBlock :: BasicBlock -> LocalValueSimplification BasicBlock
@@ -142,7 +147,7 @@ localValueSimplification mil = do
                     case val' of
                         Const _ -> recordCopy sym val'
                         Load  _ -> recordCopy sym val'
-                        _ -> return ()
+                        _ -> killCopy sym
                     return $ Store sym val'
                 Print val -> do
                     -- if the opcode is a print, simplify the value being
@@ -283,6 +288,13 @@ localValueSimplification mil = do
             let t = copyTable s
                 t' = HashMap.delete sym t
             put s{copyTable=t'}
+
+        -- remove all recorded copies from the table
+        resetCopyTable :: LocalValueSimplification ()
+        resetCopyTable = do
+            logMsgLn "-- resetting copy table"
+            s <- get
+            put s{copyTable=empty}
 
         -- check if a symbol is in the copy table
         tableLookup :: Symbol -> LocalValueSimplification (Maybe MilValue)
