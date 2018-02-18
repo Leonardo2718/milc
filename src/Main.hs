@@ -47,60 +47,60 @@ import Control.Monad
 -- option processing -----------------------------------------------------------
 
 -- data type for representing program (comand line) options
-data Options = Options
-    { optInFiles        :: [String] -- list of source files to compile
-    , optStdOut         :: Bool     -- print ouput to standard output
-    , optStdIn          :: Bool     -- read source from std input
-    , optOptLevel       :: Int      -- optimization level
-    , optOutDir         :: String   -- path to output directory
-    , optLogFile        :: String
-    , optHelp           :: Bool     -- display usage information
+data MilcOptions = MilcOptions
+    { milcInFiles        :: [String] -- list of source files to compile
+    , milcStdOut         :: Bool     -- print ouput to standard output
+    , milcStdIn          :: Bool     -- read source from std input
+    , milcOptLevel       :: Int      -- optimization level
+    , milcOutDir         :: String   -- path to output directory
+    , milcLogFile        :: String
+    , milcHelp           :: Bool     -- display usage information
     }
 
 -- initializer for options
-defaultOptions :: Options
-defaultOptions = Options
-    { optInFiles = []
-    , optStdOut = False
-    , optStdIn = False
-    , optOptLevel = 0
-    , optOutDir = ""
-    , optLogFile = ""
-    , optHelp = False
+defaultMilcOptions :: MilcOptions
+defaultMilcOptions = MilcOptions
+    { milcInFiles = []
+    , milcStdOut = False
+    , milcStdIn = False
+    , milcOptLevel = 0
+    , milcOutDir = ""
+    , milcLogFile = ""
+    , milcHelp = False
     }
 
 -- option transformation definition (changes option values based on command line arguments)
-optionTransforms :: [OptDescr (Options -> Options)]
+optionTransforms :: [OptDescr (MilcOptions -> MilcOptions)]
 optionTransforms =
     [ Option    ['h'] ["help"]
-                (NoArg (\ opts -> opts {optHelp = True}) )
+                (NoArg (\ opts -> opts {milcHelp = True}) )
                 "display this help message"
     -- , Option    [] ["stdout"]
-    --             (NoArg (\ opts -> opts {optStdOut = True}))
+    --             (NoArg (\ opts -> opts {milcStdOut = True}))
     --             "print output to standard output"
     , Option    [] ["stdin"]
-                (NoArg (\ opts -> opts {optStdIn = True, optStdOut = True}) )
+                (NoArg (\ opts -> opts {milcStdIn = True, milcStdOut = True}) )
                 "read source from standard input (implies --stdout)"
     , Option    ['O'] []
-                (ReqArg (\ s opts -> opts {optOptLevel = read s}) "LEVEL")
+                (ReqArg (\ s opts -> opts {milcOptLevel = read s}) "LEVEL")
                 "set the optimization level (0 means no optimizations)"
     , Option    ['d'] ["outdir"]
-                (ReqArg (\ s opts -> opts {optOutDir = s}) "DIRECTORY")
+                (ReqArg (\ s opts -> opts {milcOutDir = s}) "DIRECTORY")
                 "put output files in directory DIRECTORY"
     , Option    ['l'] ["log"]
-                (OptArg (\ s opts -> opts {optLogFile = getLogFile s}) "FILE_NAME")
+                (OptArg (\ s opts -> opts {milcLogFile = getLogFile s}) "FILE_NAME")
                 "generate log and write it to file FILE_NAME (milc.log if none specified)"
     ] where
         getLogFile (Just f) = f
         getLogFile Nothing  = "milc.log"
 
 -- option transformation application
-applyOptionTransforms :: [OptDescr (Options -> Options)] -> [String] -> Options -> Options
-applyOptionTransforms transforms argv defaults = opts {optStdOut=newStdOut,optStdIn=newStdIn} where
-    newStdOut = optStdOut opts || (optInFiles opts == [])
-    newStdIn  = optStdIn opts || (optInFiles opts == [])
+applyOptionTransforms :: [OptDescr (MilcOptions -> MilcOptions)] -> [String] -> MilcOptions -> MilcOptions
+applyOptionTransforms transforms argv defaults = opts {milcStdOut=newStdOut,milcStdIn=newStdIn} where
+    newStdOut = milcStdOut opts || (milcInFiles opts == [])
+    newStdIn  = milcStdIn opts || (milcInFiles opts == [])
     opts = case getOpt' Permute transforms argv of
-        (o, p, [], [])  -> (foldl (flip id) defaults o) {optInFiles = p}
+        (o, p, [], [])  -> (foldl (flip id) defaults o) {milcInFiles = p}
         (_, _, n, [])   -> error (concatMap (\ a -> "Unknown argument: " ++ a ++ "\n") n ++ helpMessage)
         (_,_,_,errors)  -> error (concat errors ++ helpMessage)
 
@@ -114,14 +114,24 @@ helpMessage = usageInfo "Usage: milc [OPTIONS ...] [source_files ...]\n\n\
                         \  option to specify a different destination directory for all generated files.\n\
                         \  By default, milc will perform no optimizations. Use the option `-O1` to\n\
                         \  enable optimizations. All compilation errors are printed to standard error. \n\n\
-                        \Options:" optionTransforms
+                        \MilcOptions:" optionTransforms
 
 -- main program ----------------------------------------------------------------
 
+-- IO action for getting source code
+type SourceAction = CompilerMonadT String IO
+sourceAction :: IO String -> SourceAction
+sourceAction a = do
+    s <- liftIO $ a
+    return s
+
 -- define steps of a compilation
-doCompilation :: CompilerEnvironment -> CompilerMonadT () IO
-doCompilation env = do
-    logMsgLn $ concat ["======= Compiling ", source , " ======="]
+doCompilation :: String -> SourceAction -> MilcOptions -> CompilerMonadT () IO
+doCompilation f getSource options = do
+    s <- getSource
+    let sourceFile = if f == "" then "standard input" else f
+        env = CompilerEnvironment {envSource = s, envSourceFile = f, envOutDir = milcOutDir options, envOptLevel = milcOptLevel options}
+    logMsgLn $ concat ["======= Compiling ", sourceFile , " ======="]
     ts <- scan env . envSource $ env
     (ast, _) <- parse env ts
     (mil, _) <- generateMil ast
@@ -131,51 +141,39 @@ doCompilation env = do
     targetCode <- generateRSMCode optMil
     writeEncodeTargetCode env targetCode
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"
-    where
-        source = case envSourceFile env of
-            "" -> "standard input"
-            f -> f
-
--- compile source from standard input
-compileStdIn :: Options -> CompilerMonadT () IO
-compileStdIn options = do
-    s <- liftIO getContents
-    compile CompilerEnvironment {envSource = s, envSourceFile = "", envOutDir="", envOptLevel = optOptLevel options}
 
 -- run the different stages of the compiler (currently only lexer)
-compile :: CompilerEnvironment -> CompilerMonadT () IO
-compile env = (doCompilation env) `catchCompError` handleCompError where
+compile :: String -> SourceAction -> MilcOptions -> CompilerMonadT () IO
+compile f a options = (doCompilation f a options) `catchCompError` handleCompError where
     handleCompError e = do
         let msg = concat $ ["\nCOMPILATION ERROR", atLocation, ":\n", e, "\n"]
         logMsgLn msg
         liftIO $ hPutStrLn stderr msg
-    atLocation = case envSourceFile env of
+    atLocation = case f of
         "" -> ""
-        f  -> " in " ++ f
+        _  -> " in " ++ f
 
 -- compile a file (argument is path to the file)
-compileFile :: Options -> String -> String -> CompilerMonadT () IO
-compileFile options outDir f = do
-    s <- liftIO $ readFile f
-    compile CompilerEnvironment {envSource = s, envSourceFile = f, envOutDir = outDir, envOptLevel = optOptLevel options}
+compileFile :: MilcOptions -> String -> CompilerMonadT () IO
+compileFile options f = compile f (sourceAction $ readFile f) options
 
 -- compile multiple files, merging their compilation output together
-compileFiles :: Options -> String -> [String] -> CompilerMonadT () IO
-compileFiles options outDir = mapM_ $ compileFile options outDir
+compileFiles :: MilcOptions -> [String] -> CompilerMonadT () IO
+compileFiles options = mapM_ $ compileFile options
 
 -- invoke action based on parsed command line options
-runMain :: Options -> IO ()
-runMain options = if optHelp options
+runMain :: MilcOptions -> IO ()
+runMain options = if milcHelp options
     then putStrLn helpMessage   -- print help message
     else do                     -- compile all source files
-        let comp = if optStdIn options
-            then compileStdIn options
-            else compileFiles options (optOutDir options) (optInFiles options)
+        let comp = if milcStdIn options
+            then compile "" (sourceAction getContents) options
+            else compileFiles options (milcInFiles options)
         (_, l) <- runCompilerT comp
-        when (optLogFile options /= "") $ writeFile (optLogFile options) (concat l)
+        when (milcLogFile options /= "") $ writeFile (milcLogFile options) (concat l)
 
 main :: IO ()
 main = do
     args <- getArgs
-    let options = applyOptionTransforms optionTransforms args defaultOptions
+    let options = applyOptionTransforms optionTransforms args defaultMilcOptions
     runMain options
