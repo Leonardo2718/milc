@@ -114,8 +114,14 @@ import MilcAST
 import Control.Monad.State
 
 
+-- type for storing parser environment information
+data ParserEnvironment = ParserEnvironment
+    { parserSource      :: String   -- the actual source code being compiled
+    , parserSourceFile  :: String   -- path to the file containing the source code (empty if using stdin)
+    }
+
 -- definition of the parser state monad type
-data ParserState = ParserState  { compilerEnv       :: CompilerEnvironment  -- environment of current compilation
+data ParserState = ParserState  { parserEnv         :: ParserEnvironment  -- environment of current compilation
                                 , remainingTokens   :: [Token]  -- stream of tokens being parsed
                                 , lastParsedToken   :: Token    -- last token processed by parser
                                 }
@@ -123,19 +129,19 @@ type ParserStateMonad = State ParserState
 type Parser a = CompilerMonadT a ParserStateMonad
 
 -- initializer for the the parser state
-initParserState :: CompilerEnvironment -> [Token] -> ParserState
-initParserState env ts = ParserState {compilerEnv=env, remainingTokens=ts, lastParsedToken=EOF}
+initParserState :: ParserEnvironment -> [Token] -> ParserState
+initParserState env ts = ParserState {parserEnv=env, remainingTokens=ts, lastParsedToken=EOF}
 
 -- getters and setters for the parser state
-getEnv :: Parser CompilerEnvironment
+getEnv :: Parser ParserEnvironment
 getEnv = do
     s <- get
-    return $ compilerEnv s
+    return $ parserEnv s
 
-setEnv :: CompilerEnvironment -> Parser ()
+setEnv :: ParserEnvironment -> Parser ()
 setEnv env = do
     s <- get
-    put (s{compilerEnv=env})
+    put (s{parserEnv=env})
 
 getTokens :: Parser [Token]
 getTokens = do
@@ -158,7 +164,7 @@ setLastParsedToken t = do
     put (s{lastParsedToken=t})
 
 -- top level runner of a Parser instance
-runParser :: Monad m => CompilerEnvironment -> Parser a -> [Token] -> CompilerMonadT (a, ParserState) m
+runParser :: Monad m => ParserEnvironment -> Parser a -> [Token] -> CompilerMonadT (a, ParserState) m
 runParser env p ts = do
     let (c, s) = runState (runCompilerT p) (initParserState env ts)
     a <- compiler c
@@ -174,7 +180,7 @@ parseErrorAt :: AlexPosn -> String -> Parser a
 parseErrorAt pos msg = do
     env <- getEnv
     let AlexPn _ l c = pos
-        source = envSource env
+        source = parserSource env
     logError $ concat ["Parse error at ", showAlexPos pos, ":\n", msg, "\n", showErrorLocation source l c]
 
 -- throw parse error indicating an unexpected token was found
@@ -198,7 +204,7 @@ wrongTokenError' expected actual = do
         EOF -> parseError $ concat ["Expecting ", expected, " but got ", show actual, " instead"]
         Token tt pos -> do
             env <- getEnv
-            let source = envSource env
+            let source = parserSource env
                 AlexPn _ l c = pos
                 Token tt' pos' = actual
                 AlexPn _ l' c' = pos'
@@ -291,7 +297,7 @@ eatToken :: TokenType -> Parser ()
 eatToken tt = eatValueToken (show tt) (\tt' -> if tt == tt' then Just () else Nothing)
 
 -- parse the given token stream using the given compiler environment
-parse :: Monad m => CompilerEnvironment -> [Token] -> CompilerMonadT (AST, ParserState) m
+parse :: Monad m => ParserEnvironment -> [Token] -> CompilerMonadT (AST, ParserState) m
 parse env ts = do
     logMsgLn "=== Running parser ==="
     p@(ast, _) <- runParser env parseProgram ts
@@ -306,7 +312,7 @@ parseProgram = do
     stmt <- parseStatement
     assertNoMoreTokens
     env <- getEnv
-    return $ AST (envSourceFile env) stmt
+    return $ AST (parserSourceFile env) stmt
 
 -- parse a statement from the token stream
 parseStatement :: Parser Statement
