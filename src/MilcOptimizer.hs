@@ -124,7 +124,7 @@ localValueSimplification mil = do
         doValueSimplification :: Mil -> LocalValueSimplification Mil
         doValueSimplification mil@(Mil bbs) = do
             logMsgLn "%%%% Performing: Local Value Simplification %%%%"
-            bbs' <- mapM (\bb -> simplifyInBlock bb >>= forwardAnd resetCopyTable) bbs
+            bbs' <- mapM (\bb -> simplifyInBlock bb =>> resetCopyTable) bbs
             return $ Mil bbs'
 
         -- just simplify values in the contained opcodes and the terminator

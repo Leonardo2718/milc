@@ -68,3 +68,15 @@ logBlockLines n = logBlock . showFirstLines n
 concat2WithPadding :: Int -> String -> String -> String
 concat2WithPadding n a b = concat [a, padding, b] where
     padding = take (n - length a) (repeat ' ')
+
+-- given a monadic action, produces an action that takes some value, performs
+-- the input action, and simply returns (forwards) the input value, discarding
+-- the result of the input action
+forwardAnd :: Monad m => m a -> b -> m b
+forwardAnd c a = c >> return a
+
+-- composes two monad actions by discarding the result of the second and
+-- forwarding the result of the first
+infixl 1 =>>
+(=>>) :: Monad m => m a -> m b -> m a
+a =>> b = a >>= forwardAnd b

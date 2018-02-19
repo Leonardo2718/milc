@@ -322,16 +322,13 @@ parseStatement = do
     s <- case t of
         Token IF p -> do
             logMsgLn "-- parsing If Then Else statement"
-            expr <- parseExpression
-            eatToken THEN
-            thenStmt <- parseStatement
-            eatToken ELSE
+            expr <- parseExpression =>> eatToken THEN
+            thenStmt <- parseStatement =>> eatToken ELSE
             elseStmt <- parseStatement
             return $ IfThenElse expr thenStmt elseStmt p
         Token WHILE p -> do
             logMsgLn "-- parsing While Do statement"
-            expr <- parseExpression
-            eatToken DO
+            expr <- parseExpression =>> eatToken DO
             stmt <- parseStatement
             return $ WhileDo expr stmt p
         Token INPUT p -> do
