@@ -97,3 +97,8 @@ showErrorLocationI indent = showErrorLocationL (take indent $ repeat ' ')
 
 showErrorLocation :: String -> Int -> Int -> String
 showErrorLocation = showErrorLocationL ""
+
+-- given an empty CompilerMonad action, turns it into a function that
+-- takes some value and simply forwards it
+forwardAnd :: Monad m => CompilerMonadT () m -> a -> CompilerMonadT a m
+forwardAnd c a = c >> return a

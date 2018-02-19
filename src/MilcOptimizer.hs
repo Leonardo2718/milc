@@ -35,12 +35,31 @@ import MilcCFG
 
 import Data.HashMap.Strict as HashMap
 import Control.Monad.State
+import Control.Monad
+import Data.List
+
+
+-- type for storing optimization environment information
+data OptimizerEnvironment = OptimizerEnvironment
+    { optLevel :: Int
+    }
 
 -- run various optimizations
-optimize :: Monad m => Mil -> CompilerMonadT Mil m
-optimize mil = do
-    logMsgLn "=== Running Optimizations ==="
-    basicBlockMerging mil >>= localValueSimplification
+optimize :: Monad m => OptimizerEnvironment -> Mil -> CompilerMonadT Mil m
+optimize env mil = do
+    logMsgLn $ "=== Running Optimizations (level " ++ show (optLevel env) ++ ") ==="
+    let optimizations = intersperse logInterMil $ case optLevel env of
+            0 -> [ forwardAnd $ logMsgLn "%%%% No optimizations to perform %%%%"
+                 ]
+            _ -> [ basicBlockMerging
+                 , localValueSimplification
+                 , forwardAnd $ logMsgLn "%%%% All optimizations complete %%%%"
+                 ]
+        logInterMil mil@(Mil bbs) = do
+            logMsgLn "%%%% Resulting MIL %%%%"
+            logMil bbs
+            return mil
+    foldl (>>=) (return mil) optimizations
 
 -- merge all basic blocks that can be safely merged
 --
@@ -63,8 +82,6 @@ basicBlockMerging mil@(Mil bbs) = do
     cfg <- buildCFG mil
     logCFG cfg
     bbs' <- mergeBlocks cfg bbs
-    logMsgLn "-- resulting MIL"
-    logMil bbs'
     return (Mil bbs')
     where
         mergeBlocks :: Monad m => CFG -> [BasicBlock] -> CompilerMonadT [BasicBlock] m
@@ -109,11 +126,6 @@ localValueSimplification mil = do
             logMsgLn "%%%% Performing: Local Value Simplification %%%%"
             bbs' <- mapM (\bb -> simplifyInBlock bb >>= forwardAnd resetCopyTable) bbs
             return $ Mil bbs'
-
-        -- given an empty CompilerMonad action, turns it into a function that
-        -- takes some value and simply forwards it
-        forwardAnd :: Monad m => CompilerMonadT () m -> a -> CompilerMonadT a m
-        forwardAnd c a = c >> return a
 
         -- just simplify values in the contained opcodes and the terminator
         simplifyInBlock :: BasicBlock -> LocalValueSimplification BasicBlock

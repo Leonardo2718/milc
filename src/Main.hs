@@ -134,9 +134,7 @@ doCompilation f getSource options = do
     ts <- scan $ LexerEnvironment {lexSource = s, lexSourceFile = f}
     (ast, _) <- parse (ParserEnvironment {parserSource = s, parserSourceFile = f}) ts
     (mil, _) <- generateMil ast
-    optMil <- case milcOptLevel options of
-        0 -> return mil
-        _ -> optimize mil
+    optMil <- optimize (OptimizerEnvironment {optLevel = milcOptLevel options}) mil
     targetCode <- generateRSMCode optMil
     let codegenEnv = CodeGeneratorEnvironment {codegenSource=s, codegenSourceFile=f, codegenOutDir = milcOutDir options}
     writeEncodeTargetCode codegenEnv targetCode
