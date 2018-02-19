@@ -130,12 +130,11 @@ doCompilation :: String -> SourceAction -> MilcOptions -> CompilerMonadT () IO
 doCompilation f getSource options = do
     s <- getSource
     let sourceFile = if f == "" then "standard input" else f
-        env = CompilerEnvironment {envSource = s, envSourceFile = f, envOutDir = milcOutDir options, envOptLevel = milcOptLevel options}
     logMsgLn $ concat ["======= Compiling ", sourceFile , " ======="]
     ts <- scan $ LexerEnvironment {lexSource = s, lexSourceFile = f}
     (ast, _) <- parse (ParserEnvironment {parserSource = s, parserSourceFile = f}) ts
     (mil, _) <- generateMil ast
-    optMil <- case envOptLevel env of
+    optMil <- case milcOptLevel options of
         0 -> return mil
         _ -> optimize mil
     targetCode <- generateRSMCode optMil
@@ -168,8 +167,8 @@ runMain options = if milcHelp options
     then putStrLn helpMessage   -- print help message
     else do                     -- compile all source files
         let comp = if milcStdIn options
-            then compile "" (sourceAction getContents) options
-            else compileFiles options (milcInFiles options)
+            then compile "" (sourceAction getContents) options  -- compile standard input
+            else compileFiles options (milcInFiles options)     -- compile source files
         (_, l) <- runCompilerT comp
         when (milcLogFile options /= "") $ writeFile (milcLogFile options) (concat l)
 

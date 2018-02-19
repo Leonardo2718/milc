@@ -34,14 +34,6 @@ import System.IO
 import Control.Monad.IO.Class as MCIO
 
 
--- data type representing the compiler state
-data CompilerEnvironment = CompilerEnvironment
-    { envSource      :: String   -- the actual source code being compiled
-    , envSourceFile  :: String   -- path to the file containing the source code (empty if using stdin)
-    , envOutDir      :: String   -- path to directory where all output files should go
-    , envOptLevel    :: Int      -- the optimization level
-    }
-
 -- monad for managing compiler log and errors
 type CompilerLogMonadT m = WriterT [String] m
 type CompilerMonadT a m = ExceptT String (CompilerLogMonadT m) a
