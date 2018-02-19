@@ -132,7 +132,7 @@ doCompilation f getSource options = do
     let sourceFile = if f == "" then "standard input" else f
         env = CompilerEnvironment {envSource = s, envSourceFile = f, envOutDir = milcOutDir options, envOptLevel = milcOptLevel options}
     logMsgLn $ concat ["======= Compiling ", sourceFile , " ======="]
-    ts <- scan env . envSource $ env
+    ts <- scan $ LexerEnvironment {lexSource = s, lexSourceFile = f}
     (ast, _) <- parse env ts
     (mil, _) <- generateMil ast
     optMil <- case envOptLevel env of

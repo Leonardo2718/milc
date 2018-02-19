@@ -25,10 +25,10 @@
 {
 module MLexer where
 
+import CompilerEnvironment
+
 import Control.Monad
 import Data.List
-
-import CompilerEnvironment
 }
 
 %wrapper "monadUserState"
@@ -72,17 +72,23 @@ tokens :-
 
 {
 
+-- type for storing information about the lexing environment
+data LexerEnvironment = LexerEnvironment
+    { lexSource      :: String   -- the actual source code being compiled
+    , lexSourceFile  :: String   -- path to the file containing the source code (empty if using stdin)
+    }
+
 -- user state data type (for use with `monadUserState` wrapper)
 type AlexPosnStack = [AlexPosn]
 data AlexUserState = AlexUserState
-    { activeCommentStarts   :: AlexPosnStack        -- stores the position of currently active (un-closed) "/*"
-    , compilerEnvironment   :: CompilerEnvironment  -- access to current compilation Environment
+    { activeCommentStarts   :: AlexPosnStack    -- stores the position of currently active (un-closed) "/*"
+    , lexerEnvironment      :: LexerEnvironment -- access to current compilation Environment
     }
 
 -- user state initializer
 alexInitUserState :: AlexUserState
 alexInitUserState = AlexUserState   { activeCommentStarts   = []
-                                    , compilerEnvironment   = CompilerEnvironment "" "" "" 1
+                                    , lexerEnvironment      = LexerEnvironment "" ""
                                     }
 
 -- getters and setters of the user state
@@ -103,11 +109,11 @@ popActiveCommentStart = do
     setActiveCommentStarts ps
     return (p, ps)
 
-getCompilerEnvironment :: Alex CompilerEnvironment
-getCompilerEnvironment = Alex $ \ s@AlexState{alex_ust=ust} -> Right (s, compilerEnvironment ust)
+getLexerEnvironment :: Alex LexerEnvironment
+getLexerEnvironment = Alex $ \ s@AlexState{alex_ust=ust} -> Right (s, lexerEnvironment ust)
 
-setCompilerEnvironment :: CompilerEnvironment -> Alex ()
-setCompilerEnvironment env = Alex $ \ s -> Right (s{alex_ust=(alex_ust s){compilerEnvironment=env}}, ())
+setLexerEnvironment :: LexerEnvironment -> Alex ()
+setLexerEnvironment env = Alex $ \ s -> Right (s{alex_ust=(alex_ust s){lexerEnvironment=env}}, ())
 
 -- helpers for multi-line comment handling
 startComment :: AlexInput -> Int -> Alex Token
@@ -136,9 +142,9 @@ showAlexPos (AlexPn _ l c) = concat ["line ", show l, ", column ", show c]
 -- specified by the caller. It is invoked with the current lexeme as argument.
 lexerError :: (String -> String) -> AlexInput -> Int -> Alex Token
 lexerError mkmsg (pos,_,_,str) len = do
-    env <- getCompilerEnvironment
+    env <- getLexerEnvironment
     let lexerMsg = concat ["Lexical error at ", showAlexPos pos, ": ", mkmsg (take len str), "\n"
-                          , let AlexPn _ l c = pos in showErrorLocation (envSource env) l c
+                          , let AlexPn _ l c = pos in showErrorLocation (lexSource env) l c
                           ]
     alexError lexerMsg
 
@@ -187,14 +193,14 @@ scanToken = do
     tok <- alexMonadScan
     if tok == EOF then do
         activeComments <- getActiveCommentStarts
-        env <- getCompilerEnvironment
+        env <- getLexerEnvironment
         case activeComments of
             []  -> return tok
             pos -> do
                 let msg = concat $  [ "Missing ", show (length pos), " */, openning /* at:\n\t"
                                     , intercalate "\n\t" $ map errorPos pos, "\n"
                                     ]
-                    errorPos p = showAlexPos p ++ "\n" ++ showErrorLocationL "\t" (envSource env) l c where
+                    errorPos p = showAlexPos p ++ "\n" ++ showErrorLocationL "\t" (lexSource env) l c where
                         AlexPn _ l c = p
                 alexError msg
     else return tok
@@ -210,10 +216,10 @@ collectTokens = do
 
 -- helper function that scans a string and, if successful, returns a list of
 -- tokens, or emits an error otherwise
-scan :: Monad m => CompilerEnvironment -> String -> CompilerMonadT [Token] m
-scan env str = do
+scan :: Monad m => LexerEnvironment -> CompilerMonadT [Token] m
+scan env = do
     logMsgLn "=== Running lexical analysis ==="
-    ts <- rewrap $ runAlex str (setCompilerEnvironment env >> collectTokens)
+    ts <- rewrap $ runAlex (lexSource env) (setLexerEnvironment env >> collectTokens)
     logMsgLn "Lexical analysis successful"
     logMsgLn $ concat ["Tokens: ", show ts]
     return ts
