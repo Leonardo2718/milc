@@ -33,13 +33,23 @@ import CompilerEnvironment
 import System.IO
 import System.FilePath.Posix
 
+data CodeGeneratorEnvironment = CodeGeneratorEnvironment
+    { codegenSource     :: String   -- the actual source code being compiled
+    , codegenSourceFile :: String   -- path to the file containing the source code (empty if using stdin)
+    , codegenOutDir     :: String   -- path to directory where all output files should go
+    }
+
 -- type class defining a generic interface for encoding generated target code
 class TargetCode c where
-    writeEncodeTargetCode :: CompilerEnvironment -> c -> CompilerIOMonad ()
-    writeEncodeTargetCode env code = if envSourceFile env == ""
+    writeEncodeTargetCode :: CodeGeneratorEnvironment -> c -> CompilerIOMonad ()
+    writeEncodeTargetCode env code = if codegenSourceFile env == ""
         then liftIO . encodeToFile code $ stdout
         else do
-            let outFile = replaceExtension (if envOutDir env == "" then (envSourceFile env) else replaceDirectory (envSourceFile env) (envOutDir env) ) "csh"
+            let outFile = replaceExtension target "csh"
+                target  = if codegenOutDir env == ""
+                          then source
+                          else replaceDirectory source (codegenOutDir env)
+                source = codegenSourceFile env
             liftIO . withFile outFile WriteMode . encodeToFile $ code
 
     encodeToFile :: c -> Handle -> IO ()

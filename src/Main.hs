@@ -130,6 +130,7 @@ doCompilation :: String -> SourceAction -> MilcOptions -> CompilerMonadT () IO
 doCompilation f getSource options = do
     s <- getSource
     let sourceFile = if f == "" then "standard input" else f
+        env = CompilerEnvironment {envSource = s, envSourceFile = f, envOutDir = milcOutDir options, envOptLevel = milcOptLevel options}
     logMsgLn $ concat ["======= Compiling ", sourceFile , " ======="]
     ts <- scan $ LexerEnvironment {lexSource = s, lexSourceFile = f}
     (ast, _) <- parse (ParserEnvironment {parserSource = s, parserSourceFile = f}) ts
@@ -138,7 +139,8 @@ doCompilation f getSource options = do
         0 -> return mil
         _ -> optimize mil
     targetCode <- generateRSMCode optMil
-    writeEncodeTargetCode env targetCode
+    let codegenEnv = CodeGeneratorEnvironment {codegenSource=s, codegenSourceFile=f, codegenOutDir = milcOutDir options}
+    writeEncodeTargetCode codegenEnv targetCode
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"
 
 -- run the different stages of the compiler (currently only lexer)
