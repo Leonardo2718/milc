@@ -26,21 +26,26 @@ OUTPUT_DIR ?= make_build
 SOURCE_DIR = src
 
 ALEX_SOURCE = MLexer.x
+HAPPY_SOURCE = MParser.y
 HS_SOURCES = \
 	CompilerEnvironment.hs \
-	MilcUtils.hs MilcAST.hs \
-	MRDParser.hs \
-	MIL.hs \
-	MilcCFG.hs \
-	MilcOptimizer.hs \
-	MILGenerator.hs \
-	MEncoder.hs \
-	RSMGenerator.hs \
+	MilcUtils.hs \
+	MilcAST.hs \
 	Main.hs
+	# MRDParser.hs \
+	# MIL.hs \
+	# MilcCFG.hs \
+	# MilcOptimizer.hs \
+	# MILGenerator.hs \
+	# MEncoder.hs \
+	# RSMGenerator.hs \
 
 ALEX_SOURCE_PATH = $(addprefix $(SOURCE_DIR)/,$(ALEX_SOURCE))
+HAPPY_SOURCE_PATH = $(addprefix $(SOURCE_DIR)/,$(HAPPY_SOURCE))
 HS_SOURCES_PATH = $(addprefix $(SOURCE_DIR)/,$(HS_SOURCES))
+
 ALEX_OUTPUT = $(addprefix $(OUTPUT_DIR)/,$(ALEX_SOURCE:.x=.hs))
+HAPPY_OUTPUT = $(addprefix $(OUTPUT_DIR)/,$(HAPPY_SOURCE:.y=.hs))
 
 MILC = $(OUTPUT_DIR)/milc
 
@@ -50,11 +55,14 @@ _dummy := $(shell mkdir -p $(OUTPUT_DIR))
 
 all: $(MILC)
 
-$(MILC): $(HS_SOURCES_PATH) $(ALEX_OUTPUT)
-	ghc -o $@ -odir $(OUTPUT_DIR)/ -hidir $(OUTPUT_DIR)/ $(HS_SOURCES_PATH) $(ALEX_OUTPUT)
+$(MILC): $(HS_SOURCES_PATH) $(ALEX_OUTPUT) $(HAPPY_OUTPUT)
+	ghc -o $@ -odir $(OUTPUT_DIR)/ -hidir $(OUTPUT_DIR)/ $(HS_SOURCES_PATH) $(ALEX_OUTPUT) $(HAPPY_OUTPUT)
 
 $(ALEX_OUTPUT): $(ALEX_SOURCE_PATH)
 	alex $(ALEX_SOURCE_PATH) -o $@
+
+$(HAPPY_OUTPUT): $(HAPPY_SOURCE_PATH)
+	happy $(HAPPY_SOURCE_PATH) -o $@
 
 clean:
 	rm -rf $(OUTPUT_DIR)/*

@@ -48,7 +48,7 @@ class AbstractSyntaxTree a where
             name = nameOf t
             l' = ' ':' ':l
 
-data (AbstractSyntaxTree a) => WithPos a = WithPos { subTree :: a, positionOf :: AlexPosn }
+data WithPos a = WithPos { subTree :: a, positionOf :: AlexPosn }
 noPos = AlexPn (-1) (0) (0)
 
 -- type of the AST root node
