@@ -63,29 +63,28 @@ data MType  = Int
             | UserType String
             deriving (Eq, Show)
 
-data DeclSpec = DeclSpec { varName :: String, varDims :: [WithPos Int] }
+data DeclSpec = DeclSpec { varName :: String, varDims :: [WithPos MExpression] }
 
 data Declaration    = Vars { varSpecs :: [WithPos DeclSpec], varType :: WithPos MType }
 
--- AST data type of statements
-data Statement = IfThenElse {stmtExpr :: Expression, thenBranch :: Statement, elseBranch :: Statement}
-               | WhileDo {stmtExpr :: Expression, doStmt :: Statement}
-               | Input {destID :: String}
-               | Assign {destID :: String, stmtExpr :: Expression}
-               | Write {writeExpr :: Expression}
-               | Block {statements :: [Statement]}
-               -- deriving (Eq)
+data MOperator = Add | Sub | Mul | Div deriving (Eq, Show)
 
-data Operator = Add | Sub | Mul | Div deriving (Eq, Show)
+data MConstant = IntConst Int | RealConst Float | CharConst Char | BoolConst Bool deriving (Eq, Show)
 
 -- AST data type of expressions
-data Expression = Operator { op :: Operator, subExprL :: Expression, subExprR :: Expression }
+data MExpression = Operator { op :: MOperator, subExprL :: MExpression, subExprR :: MExpression }
                 | Id { idName :: String }
-                | IntVal { intValue :: Int }
-                | RealVal { realValue :: Float }
-                | CharVal { charValue :: Char }
-                | BoolVal { boolValue :: Bool }
+                | ConstVal { constVal :: MConstant }
                 -- deriving (Eq)
+
+-- AST data type of statements
+data Statement = IfThenElse {stmtExpr :: MExpression, thenBranch :: Statement, elseBranch :: Statement}
+               | WhileDo {stmtExpr :: MExpression, doStmt :: Statement}
+               | Input {destID :: String}
+               | Assign {destID :: String, stmtExpr :: MExpression}
+               | Write {writeExpr :: MExpression}
+               | Block {statements :: [Statement]}
+               -- deriving (Eq)
 
 -- instantions of AST data types
 
@@ -118,6 +117,14 @@ instance AbstractSyntaxTree MType where
     nameOf = show
     showSubTrees _ _ = []
 
+instance AbstractSyntaxTree MExpression where
+    nameOf (Operator o _ _ )= show o
+    nameOf (Id n)           = "Id " ++ show n
+    nameOf (ConstVal v)     = show v
+    showSubTrees l (Id _)       = []
+    showSubTrees l (ConstVal _) = []
+    showSubTrees l e            = [showTree l (subExprL e), showTree l (subExprR e)]
+
 instance AbstractSyntaxTree Statement where
     nameOf (IfThenElse _ _ _) = "IfThenElse"
     nameOf (WhileDo _ _)      = "WhileDo"
@@ -131,12 +138,6 @@ instance AbstractSyntaxTree Statement where
     showSubTrees l (Assign _ e)           = [showTree l e]
     showSubTrees l (Write e)              = [showTree l e]
     showSubTrees l (Block ss)             = map (showTree l) ss
-
-instance AbstractSyntaxTree Expression where
-    nameOf (Operator o _ _ )  = show o
-    nameOf (Id n)     = "Id " ++ show n
-    showSubTrees l (Id _) = []
-    showSubTrees l e        = [showTree l (subExprL e), showTree l (subExprR e)]
 
 instance Show AST where
     show = showTree ""

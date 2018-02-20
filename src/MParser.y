@@ -74,7 +74,7 @@ more_var_specs  :: { [WithPos DeclSpec] }
 var_spec        ::  { WithPos DeclSpec }
     : Id array_dimensions           { WithPos (DeclSpec (token_idname $1) $2) (tokenPos $1) }
 
-array_dimensions:: { [WithPos Int] }
+array_dimensions:: { [WithPos MExpression] }
     : '[' expr ']' array_dimensions { $2:$4 }
     | {- empty -}                   { [] }
 
@@ -85,8 +85,8 @@ type :: { WithPos MType }
     | Bool  { WithPos Bool (tokenPos $1) }
     | Id    { WithPos (UserType (token_idname $1)) (tokenPos $1) }
 
-expr :: { WithPos Int }
-    : IntVal { WithPos (token_intval $1) (tokenPos $1) }
+expr :: { WithPos MExpression }
+    : IntVal { WithPos (ConstVal (IntConst (token_intval $1))) (tokenPos $1) }
 
 {
 
