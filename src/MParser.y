@@ -39,6 +39,9 @@ import MilcAST
     Var     { Token VAR_T _ }
     Id      { Token (ID_T _) _ }
     IntVal  { Token (INTVAL_T _) _ }
+    RealVal { Token (REALVAL_T _) _ }
+    CharVal { Token (CHARVAL_T _) _ }
+    BoolVal { Token (BOOLVAL_T _) _ }
     Int     { Token INT_T _ }
     Char    { Token CHAR_T _ }
     Real    { Token REAL_T _ }
@@ -54,25 +57,25 @@ import MilcAST
 program :: { AST }
     : block {% do env <- getLexerEnvironment; return (AST (lexSourceFile env) $1) }
 
-block   :: { Block  }
+block :: { Block  }
     : declarations { CodeBlock $1 }
 
-declarations    :: { [WithPos Declaration] }
+declarations :: { [WithPos Declaration] }
     : declaration ';' declarations  { $1:$3 }
     | {- empty -}                   { [] }
 
-declaration     :: { WithPos Declaration }
-    : Var var_specs ':' type        { WithPos (Vars $2 $4) (tokenPos $1) }
+declaration :: { WithPos Declaration }
+    : Var var_specs ':' type    { WithPos (Vars $2 $4) (tokenPos $1) }
 
-var_specs       :: { [WithPos DeclSpec] }
-    : var_spec more_var_specs       { $1:$2 }
+var_specs :: { [WithPos DeclSpec] }
+    : var_spec more_var_specs   { $1:$2 }
 
-more_var_specs  :: { [WithPos DeclSpec] }
+more_var_specs :: { [WithPos DeclSpec] }
     : ',' var_spec more_var_specs   { $2:$3 }
     | {- empty -}                   { [] }
 
-var_spec        ::  { WithPos DeclSpec }
-    : Id array_dimensions           { WithPos (DeclSpec (token_idname $1) $2) (tokenPos $1) }
+var_spec ::  { WithPos DeclSpec }
+    : Id array_dimensions   { WithPos (DeclSpec (token_idname $1) $2) (tokenPos $1) }
 
 array_dimensions:: { [WithPos MExpression] }
     : '[' expr ']' array_dimensions { $2:$4 }
@@ -86,7 +89,11 @@ type :: { WithPos MType }
     | Id    { WithPos (UserType (token_idname $1)) (tokenPos $1) }
 
 expr :: { WithPos MExpression }
-    : IntVal { WithPos (ConstVal (IntConst (token_intval $1))) (tokenPos $1) }
+    : IntVal    { WithPos (ConstVal (IntConst (token_intval $1))) (tokenPos $1) }
+    | RealVal   { WithPos (ConstVal (RealConst (token_realval $1))) (tokenPos $1) }
+    | CharVal   { WithPos (ConstVal (CharConst (token_charval $1))) (tokenPos $1) }
+    | BoolVal   { WithPos (ConstVal (BoolConst (token_boolval $1))) (tokenPos $1) }
+    | Id        { WithPos (Id (token_idname $1)) (tokenPos $1)}
 
 {
 
