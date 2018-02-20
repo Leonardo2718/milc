@@ -275,15 +275,22 @@ data TokenType  = ADD_T
                 | FUN_T
                 | DATA_T
 
-                | ID_T String
-                | CTOR_T String
-                | INTVAL_T Int
-                | REALVAL_T Float
-                | BOOLVAL_T Bool
-                | CHARVAL_T Char
+                | ID_T      { idname :: String }
+                | CTOR_T    { ctor :: String }
+                | INTVAL_T  { intval :: Int }
+                | REALVAL_T { realval :: Float }
+                | CHARVAL_T { charval :: Char }
+                | BOOLVAL_T { boolval :: Bool }
                 deriving (Eq, Show)
 
-data Token  = Token TokenType AlexPosn | EOF deriving (Eq)
+data Token  = Token {tokenType :: TokenType, tokenPos :: AlexPosn} | EOF deriving (Eq)
+
+token_idname = idname . tokenType
+token_ctor = ctor . tokenType
+token_intval = intval . tokenType
+token_realval = realval . tokenType
+token_charval = charval . tokenType
+token_boolval = boolval . tokenType
 
 instance Show Token where
     show (Token tt pos) = concat [show tt, " (", showAlexPos pos, ")"]

@@ -37,8 +37,8 @@ import MilcAST
 %tokentype { Token }
 %token
     Var     { Token VAR_T _ }
-    Id      { Token (ID_T $$) _ }
-    IntVal  { Token (INTVAL_T $$) _ }
+    Id      { Token (ID_T _) _ }
+    IntVal  { Token (INTVAL_T _) _ }
     Int     { Token INT_T _ }
     Char    { Token CHAR_T _ }
     Real    { Token REAL_T _ }
@@ -52,42 +52,43 @@ import MilcAST
 %%
 
 program :: { AST }
-        : block {% do env <- getLexerEnvironment; return (AST (lexSourceFile env) $1) }
+    : block {% do env <- getLexerEnvironment; return (AST (lexSourceFile env) $1) }
 
 block   :: { Block  }
-        : declarations { CodeBlock $1 }
+    : declarations { CodeBlock $1 }
 
 declarations    :: { [WithPos Declaration] }
-                : declaration ';' declarations  { $1:$3 }
-                | {- empty -}                   { [] }
+    : declaration ';' declarations  { $1:$3 }
+    | {- empty -}                   { [] }
 
 declaration     :: { WithPos Declaration }
-                : Var var_specs ':' type        { WithPos (Vars $2 (WithPos $4 noPos)) noPos }
+    : Var var_specs ':' type        { WithPos (Vars $2 $4) (tokenPos $1) }
 
 var_specs       :: { [WithPos DeclSpec] }
-                : var_spec more_var_specs       { $1:$2 }
+    : var_spec more_var_specs       { $1:$2 }
+
 more_var_specs  :: { [WithPos DeclSpec] }
-                : ',' var_spec more_var_specs   { $2:$3 }
-                | {- empty -}                   { [] }
--- var_spec        : Id array_dimensions           { (let ID_T s = $1 in s, $2) }
+    : ',' var_spec more_var_specs   { $2:$3 }
+    | {- empty -}                   { [] }
+
 var_spec        ::  { WithPos DeclSpec }
-                : Id array_dimensions           { WithPos (DeclSpec $1 $2) noPos }
+    : Id array_dimensions           { WithPos (DeclSpec (token_idname $1) $2) (tokenPos $1) }
+
 array_dimensions:: { [WithPos Int] }
-                : '[' expr ']' array_dimensions { $2:$4 }
-                | {- empty -}                   { [] }
+    : '[' expr ']' array_dimensions { $2:$4 }
+    | {- empty -}                   { [] }
 
-type            : Int   { Int }
-                | Char  { Char }
-                | Real  { Real }
-                | Bool  { Bool }
-                | Id    { UserType $1 }
+type :: { WithPos MType }
+    : Int   { WithPos Int (tokenPos $1) }
+    | Char  { WithPos Char (tokenPos $1) }
+    | Real  { WithPos Real (tokenPos $1) }
+    | Bool  { WithPos Bool (tokenPos $1) }
+    | Id    { WithPos (UserType (token_idname $1)) (tokenPos $1) }
 
--- expr : IntVal { (let INTVAL_T v = $1 in v) }
-expr : IntVal { WithPos $1 noPos }
+expr :: { WithPos Int }
+    : IntVal { WithPos (token_intval $1) (tokenPos $1) }
 
 {
-
-
 
 alexwrap :: (Token -> Alex a) -> Alex a
 alexwrap = (alexMonadScan >>=)
