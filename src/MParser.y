@@ -91,7 +91,7 @@ expr :: { WithPos Int }
 {
 
 alexwrap :: (Token -> Alex a) -> Alex a
-alexwrap = (alexMonadScan >>=)
+alexwrap = (scanToken >>=)
 
 parseError :: Token -> Alex a
 parseError t = alexError ("Unexpected token: " ++ show t)
