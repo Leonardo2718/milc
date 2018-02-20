@@ -61,4 +61,4 @@ quux
 /***************
 ****************/
 
-begin /* empty statement to meet bare-minimum language requirements */ end
+/* empty statement to meet bare-minimum language requirements */
