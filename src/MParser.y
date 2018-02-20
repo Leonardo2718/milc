@@ -94,7 +94,16 @@ alexwrap :: (Token -> Alex a) -> Alex a
 alexwrap = (scanToken >>=)
 
 parseError :: Token -> Alex a
-parseError t = alexError ("Unexpected token: " ++ show t)
+parseError t = do
+    env <- getLexerEnvironment
+    let errMsg = concat [ "Parse error at ", showAlexPos pos, ":\n"
+                        , "Unexpected token: ", show (tokenType t) ,"\n"
+                        , showErrorLocation source line column
+                        ]
+        pos = tokenPos t
+        AlexPn _ line column = pos
+        source = lexSource env
+    alexError errMsg
 
 parse :: Monad m => LexerEnvironment -> CompilerMonadT AST m
 parse env = do
