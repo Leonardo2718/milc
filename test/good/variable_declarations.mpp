@@ -1,0 +1,7 @@
+var x:int;
+var y,z:int;
+var b:bool;
+var A[3][3]:real;
+var c[20]:char;
+var L:intlist;
+var v1,v2[3],v4[4][3]:real;
