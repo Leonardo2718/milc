@@ -99,7 +99,6 @@ tokens :-
 
 <0>         "return"    { emitToken (\_ -> RETURN_T) }
 
-<0>         "data"      { emitToken (\_ -> DATA_T) }
 <0>         "size"      { emitToken (\_ -> SIZE_T) }
 <0>         "float"     { emitToken (\_ -> FLOAT_T) }
 
@@ -107,8 +106,9 @@ tokens :-
 <0>         "real"      { emitToken (\_ -> REAL_T) }
 <0>         "char"      { emitToken (\_ -> CHAR_T) }
 <0>         "bool"      { emitToken (\_ -> BOOL_T) }
-<0>         "bar"       { emitToken (\_ -> VAR_T) }
+<0>         "var"       { emitToken (\_ -> VAR_T) }
 <0>         "fun"       { emitToken (\_ -> FUN_T) }
+<0>         "data"      { emitToken (\_ -> DATA_T) }
 
 <0>         @identirier         { emitToken (\s -> ID_T s) }
 <0>         @constructor        { emitToken (\s -> CTOR_T s) }
@@ -264,7 +264,6 @@ data TokenType  = ADD_T
 
                 | RETURN_T
 
-                | DATA_T
                 | SIZE_T
                 | FLOAT_T
 
@@ -274,6 +273,7 @@ data TokenType  = ADD_T
                 | BOOL_T
                 | VAR_T
                 | FUN_T
+                | DATA_T
 
                 | ID_T String
                 | CTOR_T String
@@ -316,6 +316,11 @@ collectTokens = do
             tok <- scanToken
             if tok == EOF then return l else do loop $! (l ++ [tok])
     loop []
+
+runAlexCompiler :: Monad m => LexerEnvironment -> Alex a -> CompilerMonadT a m
+runAlexCompiler env a = case runAlex (lexSource env) (setLexerEnvironment env >> a) of
+    Right a'    -> return a'
+    Left e      -> compError e
 
 -- helper function that scans a string and, if successful, returns a list of
 -- tokens, or emits an error otherwise

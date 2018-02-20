@@ -37,7 +37,6 @@ import Data.List
 -- type class specifying a common interface to elements of an AST
 class AbstractSyntaxTree a where
     nameOf :: a -> String                   -- returns name of an AST node
-    positionOf :: a -> AlexPosn             -- returns position in source code of an AST node
 
     -- returns string representations of the sub-trees of an AST node
     showSubTrees :: String -> a -> [String]
@@ -45,71 +44,101 @@ class AbstractSyntaxTree a where
     -- returns string representation of an AST sub-tree
     showTree :: String -> a -> String
     showTree lead ast = intercalate "\n" (showAllTrees lead ast) where
-        showAllTrees l t = (l ++ concat2WithPadding 20 name pos) : showSubTrees l' t where
-            pos = concat ["(", showAlexPos (positionOf t), ")"]
+        showAllTrees l t = (l ++ name) : showSubTrees l' t where
             name = nameOf t
             l' = ' ':' ':l
 
+data (AbstractSyntaxTree a) => WithPos a = WithPos { subTree :: a, positionOf :: AlexPosn }
+noPos = AlexPn (-1) (0) (0)
+
 -- type of the AST root node
-data AST = AST String Statement
+data AST = AST String Block
+
+data Block = CodeBlock [WithPos Declaration]
+
+data MType  = Int
+            | Real
+            | Char
+            | Bool
+            | UserType String
+            deriving (Eq, Show)
+
+data DeclSpec = DeclSpec { varName :: String, varDims :: [WithPos Int] }
+
+data Declaration    = Vars { varSpecs :: [WithPos DeclSpec], varType :: WithPos MType }
 
 -- AST data type of statements
-data Statement = IfThenElse {stmtExpr :: Expression, thenBranch :: Statement, elseBranch :: Statement, stmtPos :: AlexPosn}
-               | WhileDo {stmtExpr :: Expression, doStmt :: Statement, stmtPos :: AlexPosn}
-               | Input {destID :: String, stmtPos :: AlexPosn}
-               | Assign {destID :: String, stmtExpr :: Expression, stmtPos :: AlexPosn}
-               | Write {writeExpr :: Expression, stmtPos :: AlexPosn}
-               | Block {statements :: [Statement], stmtPos :: AlexPosn} deriving (Eq)
+data Statement = IfThenElse {stmtExpr :: Expression, thenBranch :: Statement, elseBranch :: Statement}
+               | WhileDo {stmtExpr :: Expression, doStmt :: Statement}
+               | Input {destID :: String}
+               | Assign {destID :: String, stmtExpr :: Expression}
+               | Write {writeExpr :: Expression}
+               | Block {statements :: [Statement]}
+               -- deriving (Eq)
+
+data Operator = Add | Sub | Mul | Div deriving (Eq, Show)
 
 -- AST data type of expressions
-data Expression = Add { subExprL :: Expression, subExprR :: Expression, exprPos :: AlexPosn}
-                | Sub { subExprL :: Expression, subExprR :: Expression, exprPos :: AlexPosn}
-                | Mul { subExprL :: Expression, subExprR :: Expression, exprPos :: AlexPosn}
-                | Div { subExprL :: Expression, subExprR :: Expression, exprPos :: AlexPosn}
-                | Id { idName :: String, exprPos :: AlexPosn}
-                | Num { numValue :: Int, exprPos :: AlexPosn} deriving (Eq)
+data Expression = Operator { op :: Operator, subExprL :: Expression, subExprR :: Expression }
+                | Id { idName :: String }
+                | IntVal { intValue :: Int }
+                | RealVal { realValue :: Float }
+                | CharVal { charValue :: Char }
+                | BoolVal { boolValue :: Bool }
+                -- deriving (Eq)
 
 -- instantions of AST data types
 
+instance AbstractSyntaxTree Int where
+    nameOf = show
+    showSubTrees _ _ = []
+
+instance (AbstractSyntaxTree a) => AbstractSyntaxTree (WithPos a) where
+    nameOf (WithPos a p) = concat2WithPadding 20 (nameOf a) pos where
+        pos = concat ["(", showAlexPos p, ")"]
+    showSubTrees l (WithPos a _) = showSubTrees l a
+
 instance AbstractSyntaxTree AST where
     nameOf (AST f _) = "AST " ++ f ++ " "
-    positionOf (AST _ s) = positionOf s
     showSubTrees l (AST _ s) = [showTree l s]
 
+instance AbstractSyntaxTree Block where
+    nameOf (CodeBlock _) = "Block"
+    showSubTrees l (CodeBlock ds) = map (showTree l) ds
+
+instance AbstractSyntaxTree Declaration where
+    nameOf (Vars _ t) = "Vars"
+    showSubTrees l (Vars vars t) =  showTree l t : map (showTree l) vars
+
+instance AbstractSyntaxTree DeclSpec where
+    nameOf (DeclSpec name dims) = concat $ name : take (length dims) (repeat "[]")
+    showSubTrees l (DeclSpec _ dims) = map (\ d -> showTree l d) dims
+
+instance AbstractSyntaxTree MType where
+    nameOf = show
+    showSubTrees _ _ = []
+
 instance AbstractSyntaxTree Statement where
-    nameOf (IfThenElse _ _ _ _) = "IfThenElse"
-    nameOf (WhileDo _ _ _)      = "WhileDo"
-    nameOf (Input n _)          = "Input " ++ show n
-    nameOf (Assign n _ _)       = "Assign " ++ show n
-    nameOf (Write _ _)          = "Write"
-    nameOf (Block _ _)          = "Block"
-    positionOf                  = stmtPos
-    showSubTrees l (IfThenElse e th el _)   = [showTree l e, showTree l th, showTree l el]
-    showSubTrees l (WhileDo e s _)          = [showTree l e, showTree l s]
-    showSubTrees l (Input _ _)              = []
-    showSubTrees l (Assign _ e _)           = [showTree l e]
-    showSubTrees l (Write e _)              = [showTree l e]
-    showSubTrees l (Block ss _)             = map (showTree l) ss
+    nameOf (IfThenElse _ _ _) = "IfThenElse"
+    nameOf (WhileDo _ _)      = "WhileDo"
+    nameOf (Input n)          = "Input " ++ show n
+    nameOf (Assign n _)       = "Assign " ++ show n
+    nameOf (Write _)          = "Write"
+    nameOf (Block _)          = "Block"
+    showSubTrees l (IfThenElse e th el)   = [showTree l e, showTree l th, showTree l el]
+    showSubTrees l (WhileDo e s)          = [showTree l e, showTree l s]
+    showSubTrees l (Input _)              = []
+    showSubTrees l (Assign _ e)           = [showTree l e]
+    showSubTrees l (Write e)              = [showTree l e]
+    showSubTrees l (Block ss)             = map (showTree l) ss
 
 instance AbstractSyntaxTree Expression where
-    nameOf (Add _ _ _)  = "Add"
-    nameOf (Sub _ _ _)  = "Sub"
-    nameOf (Mul _ _ _)  = "Mul"
-    nameOf (Div _ _ _)  = "Div"
-    nameOf (Id n _)     = "Id " ++ show n
-    nameOf (Num v _)    = "Num " ++ show v
-    positionOf          = exprPos
-    showSubTrees l (Id _ _) = []
-    showSubTrees l (Num _ _)= []
+    nameOf (Operator o _ _ )  = show o
+    nameOf (Id n)     = "Id " ++ show n
+    showSubTrees l (Id _) = []
     showSubTrees l e        = [showTree l (subExprL e), showTree l (subExprR e)]
 
 instance Show AST where
-    show = showTree ""
-
-instance Show Statement where
-    show = showTree ""
-
-instance Show Expression where
     show = showTree ""
 
 -- helper for logging the string representation of an AST sub-tree

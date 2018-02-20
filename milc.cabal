@@ -74,12 +74,12 @@ executable milc
   -- .hs or .lhs file containing the Main module.
   main-is:             Main.hs
 
-  -- Build-tools: alex, happy
-  Build-tools: alex
+  Build-tools: alex, happy
 
   -- Modules included in this executable, other than Main.
-  other-modules: CompilerEnvironment, MilcUtils, MLexer, MilcAST, MRDParser,
-    MIL, MILGenerator, MilcCFG, MilcOptimizer, MEncoder, RSMGenerator
+  -- other-modules: CompilerEnvironment, MilcUtils, MLexer, MilcAST, MRDParser,
+  --   MIL, MILGenerator, MilcCFG, MilcOptimizer, MEncoder, RSMGenerator
+  other-modules: CompilerEnvironment, MilcUtils, MLexer, MParser
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:

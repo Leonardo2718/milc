@@ -29,6 +29,7 @@ module Main where
 -- local imports
 import CompilerEnvironment
 import MLexer
+import MParser
 -- import MRDParser
 -- import MILGenerator
 -- import MEncoder
@@ -131,9 +132,8 @@ doCompilation f getSource options = do
     s <- getSource
     let sourceFile = if f == "" then "standard input" else f
     logMsgLn $ concat ["======= Compiling ", sourceFile , " ======="]
-    ts <- scan $ LexerEnvironment {lexSource = s, lexSourceFile = f}
-    liftIO $ print ts
-    -- (ast, _) <- parse (ParserEnvironment {parserSource = s, parserSourceFile = f}) ts
+    t <- parse $ LexerEnvironment {lexSource = s, lexSourceFile = f}
+    liftIO $ print t
     -- (mil, _) <- generateMil ast
     -- optMil <- optimize (OptimizerEnvironment {optLevel = milcOptLevel options}) mil
     -- targetCode <- generateRSMCode optMil
