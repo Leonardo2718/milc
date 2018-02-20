@@ -33,10 +33,12 @@ import Data.List
 
 %wrapper "monadUserState"
 
-$digit = 0-9        -- digits
-$alpha = [a-zA-Z]   -- alphabetic characters
+$digit = 0-9            -- digits
+$alpha = [a-zA-Z]       -- alphabetic characters
+$char = [_A-Za-z0-9]   -- M character
 
 @identirier = $alpha[$digit $alpha]*
+@constructor = "#"[_ $digit $alpha]*
 
 -- multi-line comment handling largely inspired by:
 -- https://github.com/simonmar/alex/blob/master/examples/tiger.x
@@ -49,26 +51,76 @@ tokens :-
 <comment>   "*/"        { unembedComment }
 <comment>   .           ;
 <0>         "*/"        { lexerError (\_ -> "Unexpected */") }
-<0>         "if"        { emitToken (\_ -> IF) }
-<0>         "then"      { emitToken (\_ -> THEN) }
-<0>         "else"      { emitToken (\_ -> ELSE) }
-<0>         "while"     { emitToken (\_ -> WHILE) }
-<0>         "do"        { emitToken (\_ -> DO) }
-<0>         "begin"     { emitToken (\_ -> BEGIN) }
-<0>         "end"       { emitToken (\_ -> END) }
-<0>         "input"     { emitToken (\_ -> INPUT) }
-<0>         "write"     { emitToken (\_ -> WRITE) }
-<0>         @identirier { emitToken (\s -> ID s) }
-<0>         $digit+     { emitToken (\s -> NUM (read s)) }
-<0>         ":="        { emitToken (\_ -> ASSIGN) }
-<0>         "+"         { emitToken (\_ -> ADD) }
-<0>         "-"         { emitToken (\_ -> SUB) }
-<0>         "*"         { emitToken (\_ -> MUL) }
-<0>         "/"         { emitToken (\_ -> DIV) }
-<0>         "("         { emitToken (\_ -> LPAR) }
-<0>         ")"         { emitToken (\_ -> RPAR) }
-<0>         ";"         { emitToken (\_ -> SEMICOLON) }
-            .           { lexerError (\s -> "Unrecognized character " ++ s) }
+
+<0>         "+"         { emitToken (\_ -> ADD_T) }
+<0>         "-"         { emitToken (\_ -> SUB_T) }
+<0>         "*"         { emitToken (\_ -> MUL_T) }
+<0>         "/"         { emitToken (\_ -> DIV_T) }
+
+<0>         "=>"        { emitToken (\_ -> ARROW_T) }
+
+<0>         "&&"        { emitToken (\_ -> AND_T) }
+<0>         "||"        { emitToken (\_ -> OR_T) }
+<0>         "not"       { emitToken (\_ -> NOT_T) }
+
+<0>         "="         { emitToken (\_ -> EQ_T) }
+<0>         "<"         { emitToken (\_ -> LT_T) }
+<0>         "=<"        { emitToken (\_ -> LE_T) }
+<0>         ">"         { emitToken (\_ -> GT_T) }
+<0>         ">="        { emitToken (\_ -> GE_T) }
+
+<0>         ":="        { emitToken (\_ -> ASSIGN_T) }
+
+<0>         "("         { emitToken (\_ -> LPAREN_T) }
+<0>         ")"         { emitToken (\_ -> RPAREN_T) }
+<0>         "{"         { emitToken (\_ -> LBRACE_T) }
+<0>         "}"         { emitToken (\_ -> RBRACE_T) }
+<0>         "["         { emitToken (\_ -> LBRACK_T) }
+<0>         "]"         { emitToken (\_ -> RBRACK_T) }
+
+<0>         "|"         { emitToken (\_ -> PIPE_T) }
+
+<0>         ":"         { emitToken (\_ -> COLON_T) }
+<0>         ";"         { emitToken (\_ -> SEMICOLON_T) }
+<0>         ","         { emitToken (\_ -> COMMA_T) }
+
+<0>         "if"        { emitToken (\_ -> IF_T) }
+<0>         "then"      { emitToken (\_ -> THEN_T) }
+<0>         "else"      { emitToken (\_ -> ELSE_T) }
+<0>         "while"     { emitToken (\_ -> WHILE_T) }
+<0>         "do"        { emitToken (\_ -> DO_T) }
+<0>         "case"      { emitToken (\_ -> CASE_T) }
+<0>         "of"        { emitToken (\_ -> OF_T) }
+
+<0>         "read"      { emitToken (\_ -> READ_T) }
+<0>         "print"     { emitToken (\_ -> PRINT_T) }
+<0>         "floor"     { emitToken (\_ -> FLOOR_T) }
+<0>         "ceil"      { emitToken (\_ -> CEIL_T) }
+
+<0>         "return"    { emitToken (\_ -> RETURN_T) }
+
+<0>         "data"      { emitToken (\_ -> DATA_T) }
+<0>         "size"      { emitToken (\_ -> SIZE_T) }
+<0>         "float"     { emitToken (\_ -> FLOAT_T) }
+
+<0>         "int"       { emitToken (\_ -> INT_T) }
+<0>         "real"      { emitToken (\_ -> REAL_T) }
+<0>         "char"      { emitToken (\_ -> CHAR_T) }
+<0>         "bool"      { emitToken (\_ -> BOOL_T) }
+<0>         "bar"       { emitToken (\_ -> VAR_T) }
+<0>         "fun"       { emitToken (\_ -> FUN_T) }
+
+<0>         @identirier         { emitToken (\s -> ID_T s) }
+<0>         @constructor        { emitToken (\s -> CTOR_T s) }
+<0>         $digit+             { emitToken (\s -> INTVAL_T (read s)) }
+<0>         $digit+ "." $digit+ { emitToken (\s -> REALVAL_T (read s)) }
+<0>         "true"              { emitToken (\_ -> BOOLVAL_T True) }
+<0>         "false"             { emitToken (\_ -> BOOLVAL_T False) }
+<0>         \" $char \"         { emitToken (\s -> CHARVAL_T (s !! 1)) }-- "
+<0>         \" "\n" \"          { emitToken (\s -> CHARVAL_T '\n') }    -- "
+<0>         \" "\t" \"          { emitToken (\s -> CHARVAL_T '\t') }    -- "
+
+            .           { lexerError (\s -> "Unrecognized character pattern strating with: " ++ s) }
 
 {
 
@@ -160,25 +212,76 @@ alexEOF :: Alex Token
 alexEOF = return EOF
 
 -- the Token type
-data TokenType  = IF
-                | THEN
-                | ELSE
-                | WHILE
-                | DO
-                | BEGIN
-                | END
-                | INPUT
-                | WRITE
-                | ID String
-                | NUM Int
-                | ASSIGN
-                | ADD
-                | SUB
-                | MUL
-                | DIV
-                | LPAR
-                | RPAR
-                | SEMICOLON deriving (Eq, Show)
+data TokenType  = ADD_T
+                | SUB_T
+                | MUL_T
+                | DIV_T
+
+                | ARROW_T
+
+                | AND_T
+                | OR_T
+                | NOT_T
+
+                | EQ_T
+                | LT_T
+                | LE_T
+                | GT_T
+                | GE_T
+
+                | ASSIGN_T
+
+                | LPAREN_T
+                | RPAREN_T
+                | LBRACE_T
+                | RBRACE_T
+                | LBRACK_T
+                | RBRACK_T
+
+                | PIPE_T
+
+                | COLON_T
+                | SEMICOLON_T
+                | COMMA_T
+
+                | IF_T
+                | THEN_T
+                | ELSE_T
+                | WHILE_T
+                | DO_T
+                | CASE_T
+                | OF_T
+
+                | BEGIN_T
+                | END_T
+
+                -- | INPUT_T
+                | READ_T
+                -- | WRITE_T
+                | PRINT_T
+                | FLOOR_T
+                | CEIL_T
+
+                | RETURN_T
+
+                | DATA_T
+                | SIZE_T
+                | FLOAT_T
+
+                | INT_T
+                | REAL_T
+                | CHAR_T
+                | BOOL_T
+                | VAR_T
+                | FUN_T
+
+                | ID_T String
+                | CTOR_T String
+                | INTVAL_T Int
+                | REALVAL_T Float
+                | BOOLVAL_T Bool
+                | CHARVAL_T Char
+                deriving (Eq, Show)
 
 data Token  = Token TokenType AlexPosn | EOF deriving (Eq)
 

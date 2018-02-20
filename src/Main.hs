@@ -29,11 +29,11 @@ module Main where
 -- local imports
 import CompilerEnvironment
 import MLexer
-import MRDParser
-import MILGenerator
-import MEncoder
-import RSMGenerator
-import MilcOptimizer
+-- import MRDParser
+-- import MILGenerator
+-- import MEncoder
+-- import RSMGenerator
+-- import MilcOptimizer
 
 -- system imports
 import System.Environment (getArgs)
@@ -132,12 +132,13 @@ doCompilation f getSource options = do
     let sourceFile = if f == "" then "standard input" else f
     logMsgLn $ concat ["======= Compiling ", sourceFile , " ======="]
     ts <- scan $ LexerEnvironment {lexSource = s, lexSourceFile = f}
-    (ast, _) <- parse (ParserEnvironment {parserSource = s, parserSourceFile = f}) ts
-    (mil, _) <- generateMil ast
-    optMil <- optimize (OptimizerEnvironment {optLevel = milcOptLevel options}) mil
-    targetCode <- generateRSMCode optMil
-    let codegenEnv = CodeGeneratorEnvironment {codegenSource=s, codegenSourceFile=f, codegenOutDir = milcOutDir options}
-    writeEncodeTargetCode codegenEnv targetCode
+    liftIO $ print ts
+    -- (ast, _) <- parse (ParserEnvironment {parserSource = s, parserSourceFile = f}) ts
+    -- (mil, _) <- generateMil ast
+    -- optMil <- optimize (OptimizerEnvironment {optLevel = milcOptLevel options}) mil
+    -- targetCode <- generateRSMCode optMil
+    -- let codegenEnv = CodeGeneratorEnvironment {codegenSource=s, codegenSourceFile=f, codegenOutDir = milcOutDir options}
+    -- writeEncodeTargetCode codegenEnv targetCode
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"
 
 -- run the different stages of the compiler (currently only lexer)
