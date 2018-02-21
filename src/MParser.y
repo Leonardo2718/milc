@@ -38,7 +38,10 @@ import MilcAST
 %token
     Var     { Token VAR_T _ }
     Fun     { Token FUN_T _ }
+    Data    { Token DATA_T _ }
     Id      { Token (ID_T _) _ }
+    Ctor    { Token (CTOR_T _) _ }
+    Of      { Token OF_T _ }
     IntVal  { Token (INTVAL_T _) _ }
     RealVal { Token (REALVAL_T _) _ }
     CharVal { Token (CHARVAL_T _) _ }
@@ -56,6 +59,9 @@ import MilcAST
     ']'     { Token RBRACK_T _ }
     '{'     { Token LBRACE_T _ }
     '}'     { Token RBRACE_T _ }
+    '|'     { Token PIPE_T _ }
+    '='     { Token EQ_T _ }
+    '*'     { Token MUL_T _ }
 
 %%
 
@@ -70,9 +76,9 @@ declarations :: { [WithPos MDeclaration] }
     | {- empty -}                   { [] }
 
 declaration :: { WithPos MDeclaration }
-    : Var var_specs ':' type                        { WithPos
-                                                        (Vars $2 $4)
-                                                        (tokenPos $1) }
+    : Var var_specs ':' type    { WithPos
+                                    (Vars $2 $4)
+                                    (tokenPos $1) }
     | Fun Id param_list ':' type '{' fun_block '}'  { WithPos
                                                         ( Fun
                                                           (WithPos (MIdName (token_idname $2)) (tokenPos $2) )
@@ -81,7 +87,15 @@ declaration :: { WithPos MDeclaration }
                                                           $7
                                                         )
                                                         (tokenPos $1) }
+    | Data Id '=' ctor_declarations { WithPos
+                                      ( Data
+                                        (WithPos (MIdName (token_idname $2)) (tokenPos $2) )
+                                        $4
+                                      )
+                                      (tokenPos $1)
+                                    }
 
+-- variable declarations
 var_specs :: { [WithPos DeclSpec] }
     : var_spec more_var_specs   { $1:$2 }
 
@@ -96,6 +110,7 @@ array_dimensions:: { [WithPos MExpression] }
     : '[' expr ']' array_dimensions { $2:$4 }
     | {- empty -}                   { [] }
 
+-- function declarations
 fun_block :: { [WithPos MDeclaration] }
     : declarations  { $1 }
 
@@ -117,6 +132,27 @@ basic_array_dimensions :: { Int }
     : '[' ']' basic_array_dimensions    { 1 + $3 }
     | {- empty -}                       { 0 }
 
+-- data type declarations
+ctor_declarations :: { [WithPos MConstructor] }
+    : ctor_decl more_ctor_decl  { $1:$2 }
+    | {- empty -}               { [] }
+
+more_ctor_decl :: { [WithPos MConstructor] }
+    : '|' ctor_decl more_ctor_decl  { $2:$3 }
+    | {- empty -}                   { [] }
+
+ctor_decl :: { WithPos MConstructor }
+    : Ctor Of type_list { WithPos (MCtorT (token_ctor $1) $3) (tokenPos $1) }
+    | Ctor              { WithPos (MCtor (token_ctor $1)) (tokenPos $1) }
+
+type_list :: { [WithPos MType] }
+    : type more_type    { $1:$2 }
+
+more_type :: { [WithPos MType] }
+    : '*' type more_type    { $2:$3 }
+    | {- empty -}           { [] }
+
+-- other things
 type :: { WithPos MType }
     : Int   { WithPos Int (tokenPos $1) }
     | Char  { WithPos Char (tokenPos $1) }
@@ -158,7 +194,7 @@ parse env = do
     logMsgLn "=== Running parser ==="
     ast <- runAlexCompiler env parseM
     logMsgLn "Parsing successful"
-    logMsgLn "Generated AST: "
+    logMsgLn "Generated AST:"
     logTree ast
     return ast
 

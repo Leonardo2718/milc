@@ -58,7 +58,7 @@ noPos = AlexPn (-1) (0) (0)
 -- type of the AST root node
 data AST = AST String Block
 instance AbstractSyntaxTree AST where
-    nameOf (AST f _) = "AST " ++ f ++ " "
+    nameOf (AST f _) = "AST " ++ f
     showSubTrees l (AST _ s) = [showTree l s]
 instance Show AST where
     show = showTree ""
@@ -88,6 +88,13 @@ instance AbstractSyntaxTree MIdentifier where
     nameOf = show
     showSubTrees _ _ = []
 
+data MConstructor = MCtor String | MCtorT String [WithPos MType]
+instance AbstractSyntaxTree MConstructor where
+    nameOf (MCtor name) = name
+    nameOf (MCtorT name _) = name
+    showSubTrees _ (MCtor _) = []
+    showSubTrees l (MCtorT _ ts) = map (showTree l) ts
+
 data MOperator = MAdd | MSub | MMul | MDiv deriving (Eq, Show)
 
 data MConstant = IntConst Int | RealConst Float | CharConst Char | BoolConst Bool deriving (Eq, Show)
@@ -95,7 +102,7 @@ data MConstant = IntConst Int | RealConst Float | CharConst Char | BoolConst Boo
 data DeclSpec = DeclSpec { varName :: String, varDims :: [WithPos MExpression] }
 instance AbstractSyntaxTree DeclSpec where
     nameOf (DeclSpec name dims) = concat $ name : take (length dims) (repeat "[]")
-    showSubTrees l (DeclSpec _ dims) = map (\ d -> showTree l d) dims
+    showSubTrees l (DeclSpec _ dims) = map (showTree l) dims
 
 data MDeclaration   = Vars  { varSpecs :: [WithPos DeclSpec]
                             , varType :: WithPos MType
@@ -106,11 +113,16 @@ data MDeclaration   = Vars  { varSpecs :: [WithPos DeclSpec]
                             , funDecls :: [WithPos MDeclaration]
                             -- , funBody
                             }
+                    | Data  { datatypeName :: (WithPos MIdentifier)
+                            , datacCtors :: [WithPos MConstructor]
+                            }
 instance AbstractSyntaxTree MDeclaration where
-    nameOf (Vars _ t) = "Vars"
+    nameOf (Vars _ _) = "Vars"
     nameOf (Fun _ _ _ _) = "Fun"
-    showSubTrees l (Vars vars t) =  showTree l t : map (showTree l) vars
-    showSubTrees l (Fun n t ps ds) = showTree l n : showTree l t : (map (showTree l) ps) ++ (map (showTree l) ds)
+    nameOf (Data _ _) = "Data"
+    showSubTrees l (Vars vars t)    = showTree l t : map (showTree l) vars
+    showSubTrees l (Fun n t ps ds)  = showTree l n : showTree l t : (map (showTree l) ps) ++ (map (showTree l) ds)
+    showSubTrees l (Data name cts)  = showTree l name : map (showTree l) cts
 
 -- AST data type of expressions
 data MExpression = Operator { op :: MOperator, subExprL :: MExpression, subExprR :: MExpression }
