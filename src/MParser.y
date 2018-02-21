@@ -81,7 +81,7 @@ declaration :: { WithPos MDeclaration }
                                     (tokenPos $1) }
     | Fun Id param_list ':' type '{' fun_block '}'  { WithPos
                                                         ( Fun
-                                                          (WithPos (MIdName (token_idname $2)) (tokenPos $2) )
+                                                          (emitId $2)
                                                           $5
                                                           $3
                                                           $7
@@ -89,7 +89,7 @@ declaration :: { WithPos MDeclaration }
                                                         (tokenPos $1) }
     | Data Id '=' ctor_declarations { WithPos
                                       ( Data
-                                        (WithPos (MIdName (token_idname $2)) (tokenPos $2) )
+                                        (emitId $2)
                                         $4
                                       )
                                       (tokenPos $1)
@@ -161,13 +161,28 @@ type :: { WithPos MType }
     | Id    { WithPos (UserType (token_idname $1)) (tokenPos $1) }
 
 expr :: { WithPos MExpression }
-    : IntVal    { WithPos (ConstVal (IntConst (token_intval $1))) (tokenPos $1) }
-    | RealVal   { WithPos (ConstVal (RealConst (token_realval $1))) (tokenPos $1) }
-    | CharVal   { WithPos (ConstVal (CharConst (token_charval $1))) (tokenPos $1) }
-    | BoolVal   { WithPos (ConstVal (BoolConst (token_boolval $1))) (tokenPos $1) }
-    | Id        { WithPos (Id (token_idname $1)) (tokenPos $1)}
+    : IntVal    { emitConstExpr IntConst token_intval $1 }
+    | RealVal   { emitConstExpr RealConst token_realval $1 }
+    | CharVal   { emitConstExpr CharConst token_charval $1 }
+    | BoolVal   { emitConstExpr BoolConst token_boolval $1 }
+    | Id        { emitIdIn MId $1}
 
 {
+
+emitConstExpr :: (a -> MConstant) -> (Token -> a) -> Token -> WithPos MExpression
+emitConstExpr asConst getVal t = WithPos (ConstVal . asConst . getVal $ t) (tokenPos t)
+
+emitId :: Token -> WithPos MIdentifier
+emitId t = WithPos (emitIdNoP t) (tokenPos t)
+
+emitIdNoP :: Token -> MIdentifier
+emitIdNoP = MIdName . token_idname
+
+emitIdIn :: (MIdentifier -> a) -> Token -> WithPos a
+emitIdIn c t = WithPos (emitIdInNoP c t) (tokenPos t)
+
+emitIdInNoP :: (MIdentifier -> a) -> Token -> a
+emitIdInNoP c = c . emitIdNoP
 
 alexwrap :: (Token -> Alex a) -> Alex a
 alexwrap = (scanToken >>=)

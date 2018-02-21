@@ -126,14 +126,14 @@ instance AbstractSyntaxTree MDeclaration where
 
 -- AST data type of expressions
 data MExpression = Operator { op :: MOperator, subExprL :: MExpression, subExprR :: MExpression }
-                | Id { idName :: String }
+                | MId { idName :: MIdentifier }
                 | ConstVal { constVal :: MConstant }
                 -- deriving (Eq)
 instance AbstractSyntaxTree MExpression where
     nameOf (Operator o _ _ )= show o
-    nameOf (Id n)           = "Id " ++ show n
+    nameOf (MId mid)        = show mid
     nameOf (ConstVal v)     = show v
-    showSubTrees l (Id _)       = []
+    showSubTrees l (MId _)      = []
     showSubTrees l (ConstVal _) = []
     showSubTrees l e            = [showTree l (subExprL e), showTree l (subExprR e)]
 
