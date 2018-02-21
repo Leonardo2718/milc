@@ -41,7 +41,6 @@ import MilcAST
     Data    { Token DATA_T _ }
     Id      { Token (ID_T _) _ }
     Ctor    { Token (CTOR_T _) _ }
-    Of      { Token OF_T _ }
     IntVal  { Token (INTVAL_T _) _ }
     RealVal { Token (REALVAL_T _) _ }
     CharVal { Token (CHARVAL_T _) _ }
@@ -62,6 +61,20 @@ import MilcAST
     '|'     { Token PIPE_T _ }
     '='     { Token EQ_T _ }
     '*'     { Token MUL_T _ }
+    ':='    { Token ASSIGN_T _ }
+    '=>'    { Token ARROW_T _ }
+    Begin   { Token BEGIN_T _ }
+    End     { Token END_T _ }
+    Return  { Token RETURN_T _ }
+    If      { Token IF_T _ }
+    Then    { Token THEN_T _ }
+    Else    { Token ELSE_T _ }
+    While   { Token WHILE_T _ }
+    Do      { Token DO_T _ }
+    Read    { Token READ_T _ }
+    Print   { Token PRINT_T _ }
+    Case    { Token CASE_T _ }
+    Of      { Token OF_T _ }
 
 %%
 
@@ -69,7 +82,7 @@ program :: { AST }
     : block {% do env <- getLexerEnvironment; return (AST (lexSourceFile env) $1) }
 
 block :: { Block  }
-    : declarations { CodeBlock $1 }
+    : declarations program_body { CodeBlock $1 }
 
 declarations :: { [WithPos MDeclaration] }
     : declaration ';' declarations  { $1:$3 }
@@ -82,6 +95,10 @@ declaration :: { WithPos MDeclaration }
         { WithPos (Fun (emitId $2) $5 $3 $7) (tokenPos $1) }
     | Data Id '=' ctor_declarations
         { WithPos (Data (emitId $2) $4) (tokenPos $1) }
+
+program_body :: {}
+    : Begin prog_stmts End  {}
+    | prog_stmts            {}
 
 -- variable declarations
 var_specs :: { [WithPos DeclSpec] }
@@ -100,7 +117,7 @@ array_dimensions:: { [WithPos MExpression] }
 
 -- function declarations
 fun_block :: { [WithPos MDeclaration] }
-    : declarations  { $1 }
+    : declarations fun_body { $1 }
 
 param_list :: { [WithPos MParamDecl] }
     : '(' parameters ')'    { $2 }
@@ -119,6 +136,10 @@ basic_declaration :: { WithPos MParamDecl }
 basic_array_dimensions :: { Int }
     : '[' ']' basic_array_dimensions    { 1 + $3 }
     | {- empty -}                       { 0 }
+
+fun_body :: {}
+    : Begin prog_stmts Return expr ';' End  {}
+    | prog_stmts Return expr ';'            {}
 
 -- data type declarations
 ctor_declarations :: { [WithPos MConstructor] }
@@ -140,7 +161,7 @@ more_type :: { [WithPos MType] }
     : '*' type more_type    { $2:$3 }
     | {- empty -}           { [] }
 
--- other things
+-- data types
 type :: { WithPos MType }
     : Int   { emitType $1 }
     | Real  { emitType $1 }
@@ -148,6 +169,46 @@ type :: { WithPos MType }
     | Bool  { emitType $1 }
     | Id    { emitType $1 }
 
+-- statements
+
+prog_stmts :: {}
+    : prog_stmt ';' prog_stmts  {}
+    | {- empty -}               {}
+
+prog_stmt :: {}
+    : If expr Then prog_stmt Else prog_stmt {}
+    | While expr Do prog_stmt               {}
+    | location ':=' expr                    {}
+    | Read location                         {}
+    | Print expr                            {}
+    | Case expr Of '{' case_list '}'        {}
+    | '{' block '}'                         {}
+
+location :: {}
+    : Id array_dimensions   {}
+
+case_list :: {}
+    : case more_case    {}
+
+more_case :: {}
+    : '|' case more_case    {}
+    | {- empty -}           {}
+
+case :: {}
+    : Ctor var_list '=>' prog_stmt  {}
+
+var_list :: {}
+    : '(' var_list1 ')' {}
+    | {- empty -}       {}
+
+var_list1 :: {}
+    : Id more_var_list1 {}
+
+more_var_list1 :: {}
+    : ',' Id more_var_list1 {}
+    | {- empty -}           {}
+
+-- expressions
 expr :: { WithPos MExpression }
     : IntVal    { emitConstExpr IntConst token_intval $1 }
     | RealVal   { emitConstExpr RealConst token_realval $1 }
