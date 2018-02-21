@@ -76,24 +76,12 @@ declarations :: { [WithPos MDeclaration] }
     | {- empty -}                   { [] }
 
 declaration :: { WithPos MDeclaration }
-    : Var var_specs ':' type    { WithPos
-                                    (Vars $2 $4)
-                                    (tokenPos $1) }
-    | Fun Id param_list ':' type '{' fun_block '}'  { WithPos
-                                                        ( Fun
-                                                          (emitId $2)
-                                                          $5
-                                                          $3
-                                                          $7
-                                                        )
-                                                        (tokenPos $1) }
-    | Data Id '=' ctor_declarations { WithPos
-                                      ( Data
-                                        (emitId $2)
-                                        $4
-                                      )
-                                      (tokenPos $1)
-                                    }
+    : Var var_specs ':' type
+        { WithPos (Vars $2 $4) (tokenPos $1) }
+    | Fun Id param_list ':' type '{' fun_block '}'
+        { WithPos (Fun (emitId $2) $5 $3 $7) (tokenPos $1) }
+    | Data Id '=' ctor_declarations
+        { WithPos (Data (emitId $2) $4) (tokenPos $1) }
 
 -- variable declarations
 var_specs :: { [WithPos DeclSpec] }
@@ -104,7 +92,7 @@ more_var_specs :: { [WithPos DeclSpec] }
     | {- empty -}                   { [] }
 
 var_spec ::  { WithPos DeclSpec }
-    : Id array_dimensions   { WithPos (DeclSpec (token_idname $1) $2) (tokenPos $1) }
+    : Id array_dimensions   { emitIdWith (\s -> DeclSpec s $2) $1 }
 
 array_dimensions:: { [WithPos MExpression] }
     : '[' expr ']' array_dimensions { $2:$4 }
@@ -126,7 +114,7 @@ more_parameters :: { [WithPos MParamDecl] }
     | {- empty -}                           { [] }
 
 basic_declaration :: { WithPos MParamDecl }
-    : Id basic_array_dimensions ':' type    { WithPos (MParamDecl (token_idname $1) $2 $4) (tokenPos $1) }
+    : Id basic_array_dimensions ':' type    { emitIdWith (\s -> MParamDecl s $2 $4) $1}
 
 basic_array_dimensions :: { Int }
     : '[' ']' basic_array_dimensions    { 1 + $3 }
@@ -154,11 +142,11 @@ more_type :: { [WithPos MType] }
 
 -- other things
 type :: { WithPos MType }
-    : Int   { WithPos Int (tokenPos $1) }
-    | Char  { WithPos Char (tokenPos $1) }
-    | Real  { WithPos Real (tokenPos $1) }
-    | Bool  { WithPos Bool (tokenPos $1) }
-    | Id    { WithPos (UserType (token_idname $1)) (tokenPos $1) }
+    : Int   { emitType $1 }
+    | Real  { emitType $1 }
+    | Char  { emitType $1 }
+    | Bool  { emitType $1 }
+    | Id    { emitType $1 }
 
 expr :: { WithPos MExpression }
     : IntVal    { emitConstExpr IntConst token_intval $1 }
@@ -169,14 +157,31 @@ expr :: { WithPos MExpression }
 
 {
 
+emitType :: Token -> WithPos MType
+emitType t = WithPos (emitTypeNoP t) (tokenPos t)
+
+emitTypeNoP :: Token -> MType
+emitTypeNoP t = case t of
+    Token INT_T _       -> Int
+    Token REAL_T _      -> Real
+    Token CHAR_T _      -> Char
+    Token BOOL_T _      -> Bool
+    Token (ID_T name) _ -> emitIdWithNoP UserType t
+
 emitConstExpr :: (a -> MConstant) -> (Token -> a) -> Token -> WithPos MExpression
 emitConstExpr asConst getVal t = WithPos (ConstVal . asConst . getVal $ t) (tokenPos t)
 
+emitIdWith :: (String -> a) -> Token -> WithPos a
+emitIdWith c t = WithPos (emitIdWithNoP c t) (tokenPos t)
+
+emitIdWithNoP :: (String -> a) -> Token -> a
+emitIdWithNoP c = c . token_idname
+
 emitId :: Token -> WithPos MIdentifier
-emitId t = WithPos (emitIdNoP t) (tokenPos t)
+emitId = emitIdWith MIdName
 
 emitIdNoP :: Token -> MIdentifier
-emitIdNoP = MIdName . token_idname
+emitIdNoP = emitIdWithNoP MIdName
 
 emitIdIn :: (MIdentifier -> a) -> Token -> WithPos a
 emitIdIn c t = WithPos (emitIdInNoP c t) (tokenPos t)
@@ -187,22 +192,27 @@ emitIdInNoP c = c . emitIdNoP
 alexwrap :: (Token -> Alex a) -> Alex a
 alexwrap = (scanToken >>=)
 
-parseError :: Token -> Alex a
-parseError t = do
+userParseError :: String -> Token -> Alex a
+userParseError msg t = do
     env <- getLexerEnvironment
     let errMsg = case t of
             EOF -> concat   [ "Parse error at EOF:\n"
-                            , "Expecting more tokens after:\n"
+                            , if msg == "" then "Expecting more tokens after:\n"
+                                           else (msg ++ "\n")
                             , "| ", (last . lines) (lexSource env)
                             ]
             _   -> concat   [ "Parse error at ", showAlexPos pos, ":\n"
                             , "Unexpected token: ", show (tokenType t) ,"\n"
+                            , if msg == "" then "" else (msg ++ "\n")
                             , showErrorLocation source line column
                             ] where
                                 pos = tokenPos t
                                 AlexPn _ line column = pos
                                 source = lexSource env
     alexError errMsg
+
+parseError :: Token -> Alex a
+parseError = userParseError ""
 
 parse :: Monad m => LexerEnvironment -> CompilerMonadT AST m
 parse env = do
