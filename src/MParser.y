@@ -37,6 +37,7 @@ import MilcAST
 %tokentype { Token }
 %token
     Var     { Token VAR_T _ }
+    Fun     { Token FUN_T _ }
     Id      { Token (ID_T _) _ }
     IntVal  { Token (INTVAL_T _) _ }
     RealVal { Token (REALVAL_T _) _ }
@@ -49,8 +50,12 @@ import MilcAST
     ';'     { Token SEMICOLON_T _ }
     ':'     { Token COLON_T _ }
     ','     { Token COMMA_T _ }
+    '('     { Token LPAREN_T _ }
+    ')'     { Token RPAREN_T _ }
     '['     { Token LBRACK_T _ }
     ']'     { Token RBRACK_T _ }
+    '{'     { Token LBRACE_T _ }
+    '}'     { Token RBRACE_T _ }
 
 %%
 
@@ -60,12 +65,22 @@ program :: { AST }
 block :: { Block  }
     : declarations { CodeBlock $1 }
 
-declarations :: { [WithPos Declaration] }
+declarations :: { [WithPos MDeclaration] }
     : declaration ';' declarations  { $1:$3 }
     | {- empty -}                   { [] }
 
-declaration :: { WithPos Declaration }
-    : Var var_specs ':' type    { WithPos (Vars $2 $4) (tokenPos $1) }
+declaration :: { WithPos MDeclaration }
+    : Var var_specs ':' type                        { WithPos
+                                                        (Vars $2 $4)
+                                                        (tokenPos $1) }
+    | Fun Id param_list ':' type '{' fun_block '}'  { WithPos
+                                                        ( Fun
+                                                          (WithPos (MIdName (token_idname $2)) (tokenPos $2) )
+                                                          $5
+                                                          $3
+                                                          $7
+                                                        )
+                                                        (tokenPos $1) }
 
 var_specs :: { [WithPos DeclSpec] }
     : var_spec more_var_specs   { $1:$2 }
@@ -80,6 +95,27 @@ var_spec ::  { WithPos DeclSpec }
 array_dimensions:: { [WithPos MExpression] }
     : '[' expr ']' array_dimensions { $2:$4 }
     | {- empty -}                   { [] }
+
+fun_block :: { [WithPos MDeclaration] }
+    : declarations  { $1 }
+
+param_list :: { [WithPos MParamDecl] }
+    : '(' parameters ')'    { $2 }
+
+parameters :: { [WithPos MParamDecl] }
+    : basic_declaration more_parameters { $1:$2 }
+    | {- empty -}                       { [] }
+
+more_parameters :: { [WithPos MParamDecl] }
+    : ',' basic_declaration more_parameters { $2:$3 }
+    | {- empty -}                           { [] }
+
+basic_declaration :: { WithPos MParamDecl }
+    : Id basic_array_dimensions ':' type    { WithPos (MParamDecl (token_idname $1) $2 $4) (tokenPos $1) }
+
+basic_array_dimensions :: { Int }
+    : '[' ']' basic_array_dimensions    { 1 + $3 }
+    | {- empty -}                       { 0 }
 
 type :: { WithPos MType }
     : Int   { WithPos Int (tokenPos $1) }
@@ -103,13 +139,18 @@ alexwrap = (scanToken >>=)
 parseError :: Token -> Alex a
 parseError t = do
     env <- getLexerEnvironment
-    let errMsg = concat [ "Parse error at ", showAlexPos pos, ":\n"
-                        , "Unexpected token: ", show (tokenType t) ,"\n"
-                        , showErrorLocation source line column
-                        ]
-        pos = tokenPos t
-        AlexPn _ line column = pos
-        source = lexSource env
+    let errMsg = case t of
+            EOF -> concat   [ "Parse error at EOF:\n"
+                            , "Expecting more tokens after:\n"
+                            , "| ", (last . lines) (lexSource env)
+                            ]
+            _   -> concat   [ "Parse error at ", showAlexPos pos, ":\n"
+                            , "Unexpected token: ", show (tokenType t) ,"\n"
+                            , showErrorLocation source line column
+                            ] where
+                                pos = tokenPos t
+                                AlexPn _ line column = pos
+                                source = lexSource env
     alexError errMsg
 
 parse :: Monad m => LexerEnvironment -> CompilerMonadT AST m

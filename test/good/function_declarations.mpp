@@ -1,0 +1,2 @@
+fun max (n:int, m:int):int { var ans:int; };
+fun merge (x[]:int, y[]:int, r[]:int):int { };
