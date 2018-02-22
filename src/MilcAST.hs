@@ -103,10 +103,6 @@ instance AbstractSyntaxTree MDestructor where
     nameOf (MDtor name _) = name
     showSubTrees l (MDtor _ vs) = map (showTree l) vs
 
-data MOperator = MAdd | MSub | MMul | MDiv deriving (Eq, Show)
-
-data MConstant = IntConst Int | RealConst Float | CharConst Char | BoolConst Bool deriving (Eq, Show)
-
 data DeclSpec = DeclSpec { varName :: String, varDims :: [WithPos MExpression] }
 instance AbstractSyntaxTree DeclSpec where
     nameOf (DeclSpec name dims) = concat $ name : take (length dims) (repeat "[]")
@@ -161,13 +157,16 @@ instance AbstractSyntaxTree MStatement where
    showSubTrees l (MPrint e)            = [showTree l e]
    showSubTrees l (CodeBlock scope)     = showSubTrees l scope
 
+data MBinaryOp = MAdd | MSub | MMul | MDiv | MAnd | MOr deriving (Eq, Show)
+data MConstant = IntConst Int | RealConst Float | CharConst Char | BoolConst Bool deriving (Eq, Show)
+
 -- AST data type of expressions
-data MExpression = Operator { op :: MOperator, subExprL :: MExpression, subExprR :: MExpression }
+data MExpression = BinaryOp { op :: MBinaryOp, subExprL :: MExpression, subExprR :: MExpression }
                 | MId { idName :: MIdentifier }
                 | ConstVal { constVal :: MConstant }
                 -- deriving (Eq)
 instance AbstractSyntaxTree MExpression where
-    nameOf (Operator o _ _ )= show o
+    nameOf (BinaryOp o _ _ )= show o
     nameOf (MId mid)        = show mid
     nameOf (ConstVal v)     = show v
     showSubTrees l (MId _)      = []

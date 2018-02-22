@@ -60,7 +60,21 @@ import MilcAST
     '}'     { Token RBRACE_T _ }
     '|'     { Token PIPE_T _ }
     '='     { Token EQ_T _ }
+    '<'     { Token LT_T _ }
+    '>'     { Token GT_T _ }
+    '=<'    { Token LE_T _ }
+    '>='    { Token GE_T _ }
+    '+'     { Token ADD_T _ }
+    '-'     { Token SUB_T _ }
     '*'     { Token MUL_T _ }
+    '/'     { Token DIV_T _ }
+    Or      { Token OR_T _ }
+    And     { Token AND_T _ }
+    Not     { Token NOT_T _ }
+    Size    { Token SIZE_T _ }
+    Float   { Token FLOAT_T _ }
+    Floor   { Token FLOOR_T _ }
+    Ceil    { Token CEIL_T _ }
     ':='    { Token ASSIGN_T _ }
     '=>'    { Token ARROW_T _ }
     Begin   { Token BEGIN_T _ }
@@ -208,12 +222,80 @@ more_var_list1 :: { [WithPos MIdentifier] }
     | {- empty -}           { [] }
 
 -- expressions
-expr :: { WithPos MExpression }
-    : IntVal    { emitConstExpr IntConst token_intval $1 }
-    | RealVal   { emitConstExpr RealConst token_realval $1 }
-    | CharVal   { emitConstExpr CharConst token_charval $1 }
-    | BoolVal   { emitConstExpr BoolConst token_boolval $1 }
-    | Id        { emitIdIn MId $1}
+-- expr :: { WithPos MExpression }
+    -- : IntVal    { emitConstExpr IntConst token_intval $1 }
+    -- | RealVal   { emitConstExpr RealConst token_realval $1 }
+    -- | CharVal   { emitConstExpr CharConst token_charval $1 }
+    -- | BoolVal   { emitConstExpr BoolConst token_boolval $1 }
+    -- | Id        { emitIdIn MId $1}
+expr :: {}
+    : expr Or bint_term {}
+    | bint_term         {}
+
+bint_term :: {}
+    : bint_term And bint_factor {}
+    | bint_factor               {}
+
+bint_factor :: {}
+    : Not bint_factor               {}
+    | int_expr compare_op int_expr  {}
+    | int_expr                      {}
+
+compare_op :: {}
+    : '='   {}
+    | '<'   {}
+    | '>'   {}
+    | '=<'  {}
+    | '>='  {}
+
+int_expr :: {}
+    : int_expr add_op int_term  {}
+    | int_term                  {}
+
+add_op :: {}
+    : '+'   {}
+    | '-'   {}
+
+int_term :: {}
+    : int_term mul_op int_factor    {}
+    | int_factor                    {}
+
+mul_op :: {}
+    : '*'   {}
+    | '/'   {}
+
+int_factor :: {}
+    : '(' expr ')'                          {}
+    | Size '(' Id basic_array_dimensions ')'{}
+    | Float '(' expr ')'                    {}
+    | Floor '(' expr ')'                    {}
+    | Ceil '(' expr ')'                     {}
+    | Id modifier_list                      {}
+    | Ctor ctor_argument_list               {}
+    | IntVal                                {}
+    | RealVal                               {}
+    | CharVal                               {}
+    | BoolVal                               {}
+    | '-' int_factor                        {}
+
+modifier_list :: {}
+    : fun_argument_list {}
+    | array_dimensions  {}
+
+fun_argument_list :: {}
+    : '(' arguments ')' {}
+
+ctor_argument_list :: {}
+    : fun_argument_list {}
+    | {- empty -}       {}
+
+arguments :: {}
+    : expr more_arguments   {}
+    | {- empty -}           {}
+
+more_arguments :: {}
+    : ',' expr more_arguments   {}
+    | {- empty -}               {}
 
 {
 
