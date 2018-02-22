@@ -48,25 +48,30 @@ class AbstractSyntaxTree a where
             name = nameOf t
             l' = ' ':' ':l
 
-data WithPos a = WithPos { subTree :: a, positionOf :: AlexPosn } deriving (Show)
+data WithPos a  = WithPos { subTree :: a, positionOf :: AlexPosn }
+                | WithEndPos { subTree :: a, positionOf :: AlexPosn, endPosition :: AlexPosn }
+                deriving (Show)
 instance (AbstractSyntaxTree a) => AbstractSyntaxTree (WithPos a) where
     nameOf (WithPos a p) = concat2WithPadding 20 (nameOf a) pos where
         pos = concat ["(", showAlexPos p, ")"]
+    nameOf (WithEndPos a s e) = concat2WithPadding 20 (nameOf a) poses where
+        poses = concat ["(", showAlexPos s, ") (", showAlexPos e ,")"]
     showSubTrees l (WithPos a _) = showSubTrees l a
+    showSubTrees l (WithEndPos a _ _) = showSubTrees l a
 noPos = AlexPn (-1) (0) (0)
 
 -- type of the AST root node
-data AST = AST String CodeBlock
+data AST = AST String Scope
 instance AbstractSyntaxTree AST where
     nameOf (AST f _) = "AST " ++ f
     showSubTrees l (AST _ s) = [showTree l s]
 instance Show AST where
     show = showTree ""
 
-data CodeBlock = CodeBlock [WithPos MDeclaration]
-instance AbstractSyntaxTree CodeBlock where
-    nameOf (CodeBlock _) = "Block"
-    showSubTrees l (CodeBlock ds) = map (showTree l) ds
+data Scope = Scope [WithPos MDeclaration] [WithPos MStatement]
+instance AbstractSyntaxTree Scope where
+    nameOf (Scope _ _) = "Scope"
+    showSubTrees l (Scope decls stmts) = map (showTree l) decls ++ map (showTree l) stmts
 
 data MType  = Int
             | Real
@@ -127,6 +132,35 @@ instance AbstractSyntaxTree MDeclaration where
     showSubTrees l (Fun n t ps ds)  = showTree l n : showTree l t : (map (showTree l) ps) ++ (map (showTree l) ds)
     showSubTrees l (Data name cts)  = showTree l name : map (showTree l) cts
 
+data MCase = MCase MDestructor (WithPos MStatement)
+instance AbstractSyntaxTree MCase where
+    nameOf (MCase _ _) = "MCase"
+    showSubTrees l (MCase dtor stmt) = [showTree l dtor, showTree l stmt]
+
+-- AST data type of statements
+data MStatement = IfThenElse {stmtExpr :: WithPos MExpression, thenBranch :: WithPos MStatement, elseBranch :: WithPos MStatement}
+               | WhileDo {stmtExpr :: WithPos MExpression, doStmt :: WithPos MStatement}
+               | CaseOf {stmtExpr :: WithPos MExpression, cases :: [WithPos MCase]}
+               | Assign {destID :: WithPos MIdentifier, stmtExpr :: WithPos MExpression}
+               | MRead {destID :: WithPos MIdentifier}
+               | MPrint {printExpr :: WithPos MExpression}
+               | CodeBlock {blockBody :: Scope}
+instance AbstractSyntaxTree MStatement where
+   nameOf (IfThenElse _ _ _) = "IfThenElse"
+   nameOf (WhileDo _ _)      = "WhileDo"
+   nameOf (CaseOf _ _)       = "CaseOf"
+   nameOf (Assign _ _)       = "Assign "
+   nameOf (MRead _)          = "MRead "
+   nameOf (MPrint _)         = "MPrint"
+   nameOf (CodeBlock scope)  = "CodeBlock (Scope)"
+   showSubTrees l (IfThenElse e th el)  = [showTree l e, showTree l th, showTree l el]
+   showSubTrees l (WhileDo e s)         = [showTree l e, showTree l s]
+   showSubTrees l (CaseOf e cs)         = [showTree l e] ++ map (showTree l) cs
+   showSubTrees l (Assign name expr)    = [showTree l name, showTree l expr]
+   showSubTrees l (MRead name)          = [showTree l name]
+   showSubTrees l (MPrint e)            = [showTree l e]
+   showSubTrees l (CodeBlock scope)     = showSubTrees l scope
+
 -- AST data type of expressions
 data MExpression = Operator { op :: MOperator, subExprL :: MExpression, subExprR :: MExpression }
                 | MId { idName :: MIdentifier }
@@ -139,28 +173,6 @@ instance AbstractSyntaxTree MExpression where
     showSubTrees l (MId _)      = []
     showSubTrees l (ConstVal _) = []
     showSubTrees l e            = [showTree l (subExprL e), showTree l (subExprR e)]
-
--- AST data type of statements
-data Statement = IfThenElse {stmtExpr :: MExpression, thenBranch :: Statement, elseBranch :: Statement}
-               | WhileDo {stmtExpr :: MExpression, doStmt :: Statement}
-               | Input {destID :: String}
-               | Assign {destID :: String, stmtExpr :: MExpression}
-               | Write {writeExpr :: MExpression}
-               | Block {statements :: [Statement]}
-               -- deriving (Eq)
-instance AbstractSyntaxTree Statement where
-   nameOf (IfThenElse _ _ _) = "IfThenElse"
-   nameOf (WhileDo _ _)      = "WhileDo"
-   nameOf (Input n)          = "Input " ++ show n
-   nameOf (Assign n _)       = "Assign " ++ show n
-   nameOf (Write _)          = "Write"
-   nameOf (Block _)          = "Block"
-   showSubTrees l (IfThenElse e th el)   = [showTree l e, showTree l th, showTree l el]
-   showSubTrees l (WhileDo e s)          = [showTree l e, showTree l s]
-   showSubTrees l (Input _)              = []
-   showSubTrees l (Assign _ e)           = [showTree l e]
-   showSubTrees l (Write e)              = [showTree l e]
-   showSubTrees l (Block ss)             = map (showTree l) ss
 
 -- helper for logging the string representation of an AST sub-tree
 logTree :: (AbstractSyntaxTree t, Monad m) => t -> CompilerMonadT () m

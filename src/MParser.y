@@ -81,8 +81,8 @@ import MilcAST
 program :: { AST }
     : block {% do env <- getLexerEnvironment; return (AST (lexSourceFile env) $1) }
 
-block :: { CodeBlock  }
-    : declarations program_body { CodeBlock $1 }
+block :: { Scope  }
+    : declarations program_body { Scope $1 $2 }
 
 declarations :: { [WithPos MDeclaration] }
     : declaration ';' declarations  { $1:$3 }
@@ -96,9 +96,9 @@ declaration :: { WithPos MDeclaration }
     | Data Id '=' ctor_declarations
         { WithPos (Data (emitId $2) $4) (tokenPos $1) }
 
-program_body :: {}
-    : Begin prog_stmts End  {}
-    | prog_stmts            {}
+program_body :: { [WithPos MStatement] }
+    : Begin prog_stmts End  { $2 }
+    | prog_stmts            { $1 }
 
 -- variable declarations
 var_specs :: { [WithPos DeclSpec] }
@@ -170,42 +170,42 @@ type :: { WithPos MType }
     | Id    { emitType $1 }
 
 -- statements
-prog_stmts :: {}
-    : prog_stmt ';' prog_stmts  {}
-    | {- empty -}               {}
+prog_stmts :: { [WithPos MStatement] }
+    : prog_stmt ';' prog_stmts  { $1:$3 }
+    | {- empty -}               { [] }
 
-prog_stmt :: {}
-    : If expr Then prog_stmt Else prog_stmt {}
-    | While expr Do prog_stmt               {}
-    | Case expr Of '{' case_list '}'        {}
-    | location ':=' expr                    {}
-    | Read location                         {}
-    | Print expr                            {}
-    | '{' block '}'                         {}
+prog_stmt :: { WithPos MStatement }
+    : If expr Then prog_stmt Else prog_stmt { WithPos (IfThenElse $2 $4 $6) (tokenPos $1) }
+    | While expr Do prog_stmt               { WithPos (WhileDo $2 $4) (tokenPos $1) }
+    | Case expr Of '{' case_list '}'        { WithPos (CaseOf $2 $5) (tokenPos $1) }
+    | location ':=' expr                    { WithPos (Assign $1 $3) (tokenPos $2) }
+    | Read location                         { WithPos (MRead $2) (tokenPos $1) }
+    | Print expr                            { WithPos (MPrint $2) (tokenPos $1) }
+    | '{' block '}'                         { WithEndPos (CodeBlock $2) (tokenPos $1) (tokenPos $3) }
 
-location :: {}
-    : Id array_dimensions   {}
+location :: { WithPos MIdentifier }
+    : Id array_dimensions   { emitId $1 }
 
-case_list :: {}
-    : case more_case    {}
+case_list :: { [WithPos MCase] }
+    : case more_case    { $1:$2 }
 
-more_case :: {}
-    : '|' case more_case    {}
-    | {- empty -}           {}
+more_case :: { [WithPos MCase] }
+    : '|' case more_case    { $2:$3 }
+    | {- empty -}           { [] }
 
-case :: {}
-    : Ctor var_list '=>' prog_stmt  {}
+case :: { WithPos MCase }
+    : Ctor var_list '=>' prog_stmt  { WithPos (MCase (emitIdWithNoP (\s -> MDtor s $2) $1) $4) (tokenPos $1) }
 
-var_list :: {}
-    : '(' var_list1 ')' {}
-    | {- empty -}       {}
+var_list :: { [WithPos MIdentifier] }
+    : '(' var_list1 ')' { $2 }
+    | {- empty -}       { [] }
 
-var_list1 :: {}
-    : Id more_var_list1 {}
+var_list1 :: { [WithPos MIdentifier] }
+    : Id more_var_list1 { emitId $1 : $2 }
 
-more_var_list1 :: {}
-    : ',' Id more_var_list1 {}
-    | {- empty -}           {}
+more_var_list1 :: { [WithPos MIdentifier] }
+    : ',' Id more_var_list1 { emitId $2 : $3 }
+    | {- empty -}           { [] }
 
 -- expressions
 expr :: { WithPos MExpression }
