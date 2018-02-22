@@ -56,15 +56,15 @@ instance (AbstractSyntaxTree a) => AbstractSyntaxTree (WithPos a) where
 noPos = AlexPn (-1) (0) (0)
 
 -- type of the AST root node
-data AST = AST String Block
+data AST = AST String CodeBlock
 instance AbstractSyntaxTree AST where
     nameOf (AST f _) = "AST " ++ f
     showSubTrees l (AST _ s) = [showTree l s]
 instance Show AST where
     show = showTree ""
 
-data Block = CodeBlock [WithPos MDeclaration]
-instance AbstractSyntaxTree Block where
+data CodeBlock = CodeBlock [WithPos MDeclaration]
+instance AbstractSyntaxTree CodeBlock where
     nameOf (CodeBlock _) = "Block"
     showSubTrees l (CodeBlock ds) = map (showTree l) ds
 
@@ -88,12 +88,15 @@ instance AbstractSyntaxTree MIdentifier where
     nameOf = show
     showSubTrees _ _ = []
 
-data MConstructor = MCtor String | MCtorT String [WithPos MType]
+data MConstructor = MCtor String [WithPos MType]
 instance AbstractSyntaxTree MConstructor where
-    nameOf (MCtor name) = name
-    nameOf (MCtorT name _) = name
-    showSubTrees _ (MCtor _) = []
-    showSubTrees l (MCtorT _ ts) = map (showTree l) ts
+    nameOf (MCtor name _) = name
+    showSubTrees l (MCtor _ ts) = map (showTree l) ts
+
+data MDestructor = MDtor String [WithPos MIdentifier]
+instance AbstractSyntaxTree MDestructor where
+    nameOf (MDtor name _) = name
+    showSubTrees l (MDtor _ vs) = map (showTree l) vs
 
 data MOperator = MAdd | MSub | MMul | MDiv deriving (Eq, Show)
 

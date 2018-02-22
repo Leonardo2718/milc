@@ -81,7 +81,7 @@ import MilcAST
 program :: { AST }
     : block {% do env <- getLexerEnvironment; return (AST (lexSourceFile env) $1) }
 
-block :: { Block  }
+block :: { CodeBlock  }
     : declarations program_body { CodeBlock $1 }
 
 declarations :: { [WithPos MDeclaration] }
@@ -151,8 +151,8 @@ more_ctor_decl :: { [WithPos MConstructor] }
     | {- empty -}                   { [] }
 
 ctor_decl :: { WithPos MConstructor }
-    : Ctor Of type_list { WithPos (MCtorT (token_ctor $1) $3) (tokenPos $1) }
-    | Ctor              { WithPos (MCtor (token_ctor $1)) (tokenPos $1) }
+    : Ctor Of type_list { WithPos (MCtor (token_ctor $1) $3) (tokenPos $1) }
+    | Ctor              { WithPos (MCtor (token_ctor $1) []) (tokenPos $1) }
 
 type_list :: { [WithPos MType] }
     : type more_type    { $1:$2 }
@@ -170,7 +170,6 @@ type :: { WithPos MType }
     | Id    { emitType $1 }
 
 -- statements
-
 prog_stmts :: {}
     : prog_stmt ';' prog_stmts  {}
     | {- empty -}               {}
@@ -178,10 +177,10 @@ prog_stmts :: {}
 prog_stmt :: {}
     : If expr Then prog_stmt Else prog_stmt {}
     | While expr Do prog_stmt               {}
+    | Case expr Of '{' case_list '}'        {}
     | location ':=' expr                    {}
     | Read location                         {}
     | Print expr                            {}
-    | Case expr Of '{' case_list '}'        {}
     | '{' block '}'                         {}
 
 location :: {}
