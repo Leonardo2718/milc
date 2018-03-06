@@ -95,8 +95,8 @@ import MilcAST
 program :: { AST }
     : block {% do env <- getLexerEnvironment; return (AST (lexSourceFile env) $1) }
 
-block :: { Scope  }
-    : declarations program_body { Scope $1 $2 }
+block :: { MScope  }
+    : declarations program_body { MScope $1 $2 }
 
 declarations :: { [WithPos MDeclaration] }
     : declaration ';' declarations  { $1:$3 }
@@ -222,80 +222,71 @@ more_var_list1 :: { [WithPos MIdentifier] }
     | {- empty -}           { [] }
 
 -- expressions
--- expr :: { WithPos MExpression }
-    -- : IntVal    { emitConstExpr IntConst token_intval $1 }
-    -- | RealVal   { emitConstExpr RealConst token_realval $1 }
-    -- | CharVal   { emitConstExpr CharConst token_charval $1 }
-    -- | BoolVal   { emitConstExpr BoolConst token_boolval $1 }
-    -- | Id        { emitIdIn MId $1}
-expr :: {}
-    : expr Or bint_term {}
-    | bint_term         {}
+expr :: { WithPos MExpression }
+    : expr Or bint_term { emitBinOp $2 $1 $3 }
+    | bint_term         { $1 }
 
-bint_term :: {}
-    : bint_term And bint_factor {}
-    | bint_factor               {}
+bint_term :: { WithPos MExpression }
+    : bint_term And bint_factor { emitBinOp $2 $1 $3 }
+    | bint_factor               { $1 }
 
-bint_factor :: {}
-    : Not bint_factor               {}
-    | int_expr compare_op int_expr  {}
-    | int_expr                      {}
+bint_factor :: { WithPos MExpression }
+    : Not bint_factor               { WithPos (MUnaryOp MNot $2) (tokenPos $1) }
+    | int_expr compare_op int_expr  { emitBinOp $2 $1 $3 }
+    | int_expr                      { $1 }
 
-compare_op :: {}
-    : '='   {}
-    | '<'   {}
-    | '>'   {}
-    | '=<'  {}
-    | '>='  {}
+compare_op :: { Token }
+    : '='   { $1 }
+    | '<'   { $1 }
+    | '>'   { $1 }
+    | '=<'  { $1 }
+    | '>='  { $1 }
 
-int_expr :: {}
-    : int_expr add_op int_term  {}
-    | int_term                  {}
+int_expr :: { WithPos MExpression }
+    : int_expr add_op int_term  { emitBinOp $2 $1 $3}
+    | int_term                  { $1 }
 
-add_op :: {}
-    : '+'   {}
-    | '-'   {}
+add_op :: { Token }
+    : '+'   { $1 }
+    | '-'   { $1 }
 
-int_term :: {}
-    : int_term mul_op int_factor    {}
-    | int_factor                    {}
+int_term :: { WithPos MExpression }
+    : int_term mul_op int_factor    { emitBinOp $2 $1 $3 }
+    | int_factor                    { $1 }
 
-mul_op :: {}
-    : '*'   {}
-    | '/'   {}
+mul_op :: { Token }
+    : '*'   { $1 }
+    | '/'   { $1 }
 
-int_factor :: {}
-    : '(' expr ')'                          {}
-    | Size '(' Id basic_array_dimensions ')'{}
-    | Float '(' expr ')'                    {}
-    | Floor '(' expr ')'                    {}
-    | Ceil '(' expr ')'                     {}
-    | Id modifier_list                      {}
-    | Ctor ctor_argument_list               {}
-    | IntVal                                {}
-    | RealVal                               {}
-    | CharVal                               {}
-    | BoolVal                               {}
-    | '-' int_factor                        {}
+int_factor :: { WithPos MExpression }
+    : '(' expr ')'                          { $2 }
+    | Size '(' Id basic_array_dimensions ')'{ emitIdIn (\i -> MSize i $4) $3 }
+    | Float '(' expr ')'                    { emitUniOp MFloat $1 $3 }
+    | Floor '(' expr ')'                    { emitUniOp MFloor $1 $3 }
+    | Ceil '(' expr ')'                     { emitUniOp MCeil $1 $3 }
+    | Id array_dimensions                   { emitIdIn (\n -> MVar n $2) $1 }
+    | Id fun_argument_list                  { emitIdIn (\n -> MCall n $2) $1 }
+    | Ctor ctor_argument_list               { emitIdIn (\n -> MCtorVal n $2) $1 }
+    | IntVal                                { emitConst IntConst token_intval $1 }
+    | RealVal                               { emitConst RealConst token_realval $1 }
+    | CharVal                               { emitConst CharConst token_charval $1 }
+    | BoolVal                               { emitConst BoolConst token_boolval $1 }
+    | '-' int_factor                        { emitUniOp MNeg $1 $2 }
 
-modifier_list :: {}
-    : fun_argument_list {}
-    | array_dimensions  {}
+fun_argument_list :: { [WithPos MExpression] }
+    : '(' arguments ')' { $2 }
 
-fun_argument_list :: {}
-    : '(' arguments ')' {}
+ctor_argument_list :: { [WithPos MExpression] }
+    : fun_argument_list { $1 }
+    | {- empty -}       { [] }
 
-ctor_argument_list :: {}
-    : fun_argument_list {}
-    | {- empty -}       {}
+arguments :: { [WithPos MExpression] }
+    : expr more_arguments   { $1:$2 }
+    | {- empty -}           { [] }
 
-arguments :: {}
-    : expr more_arguments   {}
-    | {- empty -}           {}
-
-more_arguments :: {}
-    : ',' expr more_arguments   {}
-    | {- empty -}               {}
+more_arguments :: { [WithPos MExpression] }
+    : ',' expr more_arguments   { $2:$3 }
+    | {- empty -}               { [] }
 
 {
 
@@ -310,8 +301,8 @@ emitTypeNoP t = case t of
     Token BOOL_T _      -> Bool
     Token (ID_T name) _ -> emitIdWithNoP UserType t
 
-emitConstExpr :: (a -> MConstant) -> (Token -> a) -> Token -> WithPos MExpression
-emitConstExpr asConst getVal t = WithPos (ConstVal . asConst . getVal $ t) (tokenPos t)
+emitConst :: (a -> MConstant) -> (Token -> a) -> Token -> WithPos MExpression
+emitConst asConst getVal t = WithPos (MConst . asConst . getVal $ t) (tokenPos t)
 
 emitIdWith :: (String -> a) -> Token -> WithPos a
 emitIdWith c t = WithPos (emitIdWithNoP c t) (tokenPos t)
@@ -330,6 +321,24 @@ emitIdIn c t = WithPos (emitIdInNoP c t) (tokenPos t)
 
 emitIdInNoP :: (MIdentifier -> a) -> Token -> a
 emitIdInNoP c = c . emitIdNoP
+
+emitBinOp :: Token -> WithPos MExpression -> WithPos MExpression -> WithPos MExpression
+emitBinOp tok lhs rhs = WithPos (MBinaryOp op lhs rhs) (tokenPos tok) where
+    op = case tok of
+        Token ADD_T _   -> MAdd
+        Token SUB_T _   -> MSub
+        Token MUL_T _   -> MMul
+        Token DIV_T _   -> MDiv
+        Token OR_T _    -> MOr
+        Token AND_T _   -> MAnd
+        Token EQ_T _    -> MEqual
+        Token LT_T _    -> MLessThan
+        Token LE_T _    -> MLessEqual
+        Token GT_T _    -> MGreaterThan
+        Token GE_T _    -> MGreaterEqual
+
+emitUniOp :: MUnaryOp -> Token -> WithPos MExpression -> WithPos MExpression
+emitUniOp op tok expr = WithPos (MUnaryOp op expr) (tokenPos tok)
 
 alexwrap :: (Token -> Alex a) -> Alex a
 alexwrap = (scanToken >>=)

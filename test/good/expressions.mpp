@@ -1,0 +1,26 @@
+
+data intlist = #NIL
+             | #CONS of int * intlist;
+
+data inttree = #LEAF   of int
+             | #BRANCH of inttree * inttree;
+
+var y,z:int;
+var b:bool;
+var A[3][3]:real;
+var c[20]:char;
+var L:intlist;
+var v1,v2[3],v4[4][3]:real;
+
+fun max (n:int, m:int):int { var ans:int; return 0; };
+fun merge (x[]:int, y[]:bool, r[]:int):int { return true; };
+
+y := 3;
+z := y + 1;
+
+b := not merge(A[0], A[1], A[2]);
+
+v1 := 1.0;
+v2[v1] := v1;
+v3[y][0] := v2[ 1 * v2[1] ];
+v3[0][v2[v1] - 1] := max(y, z);
