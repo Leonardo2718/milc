@@ -1,0 +1,37 @@
+/*
+ * Prints an image of the Mandelbrot set
+ */
+
+var px,py:int;
+
+px := 0;
+py := 0;
+
+while (py < 46) do {
+    while (px < 80) do {
+        var x0,y0,x,y:real;
+        var iteration,max:int;
+        x0 := px/80.0 * 3.5 - 2.5;
+        y0 := py/46.0 * 2.0 - 1.0;
+        x := 0.0;
+        y := 0.0;
+        iteration := 0;
+        max := 1000;
+        while ((x*x + y*y < 2*2) && (iteration < max)) do {
+            var xtemp:int;
+            xtemp := x*x - y*y + x0;
+            y := 2*x*y + y0;
+            x := xtemp;
+            iteration := iteration + 1;
+        };
+        px := px + 1;
+        if (iteration < 800) then {
+            print "o";
+        } else {
+            print "x";
+        };
+    };
+    px := 0;
+    py := py + 1;
+    print "\n";
+};

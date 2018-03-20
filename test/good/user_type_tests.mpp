@@ -1,0 +1,14 @@
+data IntList = #IEMPTY | #ILIST of int * IntList;
+
+fun printIntList(l:IntList):bool {
+    case l of {
+        #ILIST (i, ls) => {
+            var b:bool;
+            print i;
+            b := printIntList(ls);
+        }
+        | #IEMPTY => {}
+    };
+
+    return true;
+};
