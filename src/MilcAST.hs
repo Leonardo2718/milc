@@ -48,13 +48,14 @@ class AbstractSyntaxTree a where
             name = nameOf t
             l' = ' ':' ':l
 
+-- special AST node for storing the test position of a single child node
 data WithPos a  = WithPos { removePos :: a, positionOf :: AlexPosn }
                 | WithEndPos { removePos :: a, positionOf :: AlexPosn, endPosition :: AlexPosn }
                 deriving (Show)
 instance (AbstractSyntaxTree a) => AbstractSyntaxTree (WithPos a) where
-    nameOf (WithPos a p) = concat2WithPadding 20 (nameOf a) pos where
+    nameOf (WithPos a p) = concat2WithPadding 25 (nameOf a) pos where
         pos = concat ["(", showAlexPos p, ")"]
-    nameOf (WithEndPos a s e) = concat2WithPadding 20 (nameOf a) poses where
+    nameOf (WithEndPos a s e) = concat2WithPadding 25 (nameOf a) poses where
         poses = concat ["(", showAlexPos s, ") (", showAlexPos e ,")"]
     showSubTrees l (WithPos a _) = showSubTrees l a
     showSubTrees l (WithEndPos a _ _) = showSubTrees l a
