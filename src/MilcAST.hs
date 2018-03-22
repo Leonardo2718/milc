@@ -86,17 +86,17 @@ instance AbstractSyntaxTree MType where
     nameOf = show
     showSubTrees _ _ = []
 
-data MParamDecl = MParamDecl String Int (WithPos MType) deriving (Show)
+data MParamDecl = MParamDecl {paramName::String, paramDim::Int, paramType::WithPos MType} deriving (Show)
 instance AbstractSyntaxTree MParamDecl where
     nameOf (MParamDecl n d (WithPos t _)) = concat $ n : take d (repeat "[]") ++ [" "] ++ [show t]
     showSubTrees _ _ = []
 
-data MIdentifier = MIdName {idName :: String} deriving (Eq, Show)
+data MIdentifier = MIdName {midName :: String} deriving (Eq, Show)
 instance AbstractSyntaxTree MIdentifier where
     nameOf = show
     showSubTrees _ _ = []
 
-data MConstructor = MCtor String [WithPos MType]
+data MConstructor = MCtor {ctorName::String, ctorTypes::[WithPos MType]}
 instance AbstractSyntaxTree MConstructor where
     nameOf (MCtor name _) = name
     showSubTrees l (MCtor _ ts) = map (showTree l) ts
