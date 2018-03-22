@@ -30,6 +30,7 @@ module Main where
 import CompilerEnvironment
 import MLexer
 import MParser
+import MSemantics
 -- import MRDParser
 -- import MILGenerator
 -- import MEncoder
@@ -133,7 +134,8 @@ doCompilation f getSource options = do
     let sourceFile = if f == "" then "standard input" else f
     logMsgLn $ concat ["======= Compiling ", sourceFile , " ======="]
     t <- parse $ LexerEnvironment {lexSource = s, lexSourceFile = f}
-    liftIO $ print t
+    -- liftIO $ print t
+    runSemanticAnalyzer analyzeAST t
     -- (mil, _) <- generateMil ast
     -- optMil <- optimize (OptimizerEnvironment {optLevel = milcOptLevel options}) mil
     -- targetCode <- generateRSMCode optMil
