@@ -92,6 +92,9 @@ tokens :-
 <0>         "case"      { emitToken (\_ -> CASE_T) }
 <0>         "of"        { emitToken (\_ -> OF_T) }
 
+<0>         "begin"     { emitToken (\_ -> BEGIN_T) }
+<0>         "end"       { emitToken (\_ -> END_T) }
+
 <0>         "read"      { emitToken (\_ -> READ_T) }
 <0>         "print"     { emitToken (\_ -> PRINT_T) }
 <0>         "floor"     { emitToken (\_ -> FLOOR_T) }

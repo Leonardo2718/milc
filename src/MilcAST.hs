@@ -91,7 +91,7 @@ instance AbstractSyntaxTree MParamDecl where
     nameOf (MParamDecl n d (WithPos t _)) = concat $ n : take d (repeat "[]") ++ [" "] ++ [show t]
     showSubTrees _ _ = []
 
-data MIdentifier = MIdName String deriving (Eq, Show)
+data MIdentifier = MIdName {idName :: String} deriving (Eq, Show)
 instance AbstractSyntaxTree MIdentifier where
     nameOf = show
     showSubTrees _ _ = []
