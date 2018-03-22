@@ -106,7 +106,7 @@ declaration :: { WithPos MDeclaration }
     : Var var_specs ':' type
         { WithPos (Vars $2 $4) (tokenPos $1) }
     | Fun Id param_list ':' type '{' fun_block '}'
-        { WithPos (Fun (emitId $2) $5 $3 $7) (tokenPos $1) }
+        { WithPos (Fun (emitId $2) $5 $3 (fst $7) (snd $7)) (tokenPos $1) }
     | Data Id '=' ctor_declarations
         { WithPos (Data (emitId $2) $4) (tokenPos $1) }
 
@@ -130,8 +130,8 @@ array_dimensions:: { [WithPos MExpression] }
     | {- empty -}                   { [] }
 
 -- function declarations
-fun_block :: { [WithPos MDeclaration] }
-    : declarations fun_body { $1 }
+fun_block :: { ([WithPos MDeclaration],[WithPos MStatement]) }
+    : declarations fun_body { ($1, $2) }
 
 param_list :: { [WithPos MParamDecl] }
     : '(' parameters ')'    { $2 }
@@ -151,9 +151,9 @@ basic_array_dimensions :: { Int }
     : '[' ']' basic_array_dimensions    { 1 + $3 }
     | {- empty -}                       { 0 }
 
-fun_body :: {}
-    : Begin prog_stmts Return expr ';' End  {}
-    | prog_stmts Return expr ';'            {}
+fun_body :: { [WithPos MStatement] }
+    : Begin prog_stmts Return expr ';' End  { $2 ++ [WithPos (MReturn $4) (tokenPos $3)] }
+    | prog_stmts Return expr ';'            { $1 ++ [WithPos (MReturn $3) (tokenPos $2)] }
 
 -- data type declarations
 ctor_declarations :: { [WithPos MConstructor] }

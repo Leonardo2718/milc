@@ -110,12 +110,12 @@ tokens :-
 <0>         "fun"       { emitToken (\_ -> FUN_T) }
 <0>         "data"      { emitToken (\_ -> DATA_T) }
 
+<0>         "true"              { emitToken (\_ -> BOOLVAL_T True) }
+<0>         "false"             { emitToken (\_ -> BOOLVAL_T False) }
 <0>         @identirier         { emitToken (\s -> ID_T s) }
 <0>         @constructor        { emitToken (\s -> CTOR_T s) }
 <0>         $digit+             { emitToken (\s -> INTVAL_T (read s)) }
 <0>         $digit+ "." $digit+ { emitToken (\s -> REALVAL_T (read s)) }
-<0>         "true"              { emitToken (\_ -> BOOLVAL_T True) }
-<0>         "false"             { emitToken (\_ -> BOOLVAL_T False) }
 <0>         \" $char \"         { emitToken (\s -> CHARVAL_T (s !! 1)) }-- "
 <0>         \" "\n" \"          { emitToken (\s -> CHARVAL_T '\n') }    -- "
 <0>         \" "\t" \"          { emitToken (\s -> CHARVAL_T '\t') }    -- "

@@ -48,6 +48,9 @@ class AbstractSyntaxTree a where
             name = nameOf t
             l' = ' ':' ':l
 
+    mapNoPos :: (a -> c) -> WithPos a -> c
+    mapNoPos f (WithPos a _) = f a
+
 -- special AST node for storing the test position of a single child node
 data WithPos a  = WithPos { removePos :: a, positionOf :: AlexPosn }
                 | WithEndPos { removePos :: a, positionOf :: AlexPosn, endPosition :: AlexPosn }
@@ -115,17 +118,17 @@ data MDeclaration   = Vars  { varSpecs :: [WithPos DeclSpec]
                             , funType :: WithPos MType
                             , funParams :: [WithPos MParamDecl]
                             , funDecls :: [WithPos MDeclaration]
-                            -- , funBody
+                            , funBody :: [WithPos MStatement]
                             }
                     | Data  { datatypeName :: (WithPos MIdentifier)
                             , datacCtors :: [WithPos MConstructor]
                             }
 instance AbstractSyntaxTree MDeclaration where
     nameOf (Vars _ _) = "Vars"
-    nameOf (Fun _ _ _ _) = "Fun"
+    nameOf (Fun _ _ _ _ _) = "Fun"
     nameOf (Data _ _) = "Data"
     showSubTrees l (Vars vars t)    = showTree l t : map (showTree l) vars
-    showSubTrees l (Fun n t ps ds)  = showTree l n : showTree l t : (map (showTree l) ps) ++ (map (showTree l) ds)
+    showSubTrees l (Fun n t ps ds b)= showTree l n : showTree l t : (map (showTree l) ps) ++ (map (showTree l) ds) ++ (map (showTree l) b)
     showSubTrees l (Data name cts)  = showTree l name : map (showTree l) cts
 
 data MCase = MCase MDestructor (WithPos MStatement)
@@ -141,6 +144,7 @@ data MStatement = IfThenElse {stmtExpr :: WithPos MExpression, thenBranch :: Wit
                 | MRead {destID :: WithPos MIdentifier}
                 | MPrint {printExpr :: WithPos MExpression}
                 | CodeBlock {blockBody :: MScope}
+                | MReturn {returnExpr :: WithPos MExpression}
 instance AbstractSyntaxTree MStatement where
    nameOf (IfThenElse _ _ _) = "IfThenElse"
    nameOf (WhileDo _ _)      = "WhileDo"
@@ -149,6 +153,7 @@ instance AbstractSyntaxTree MStatement where
    nameOf (MRead _)          = "MRead "
    nameOf (MPrint _)         = "MPrint"
    nameOf (CodeBlock scope)  = "CodeBlock (MScope)"
+   nameOf (MReturn _)        = "Return"
    showSubTrees l (IfThenElse e th el)  = [showTree l e, showTree l th, showTree l el]
    showSubTrees l (WhileDo e s)         = [showTree l e, showTree l s]
    showSubTrees l (CaseOf e cs)         = [showTree l e] ++ map (showTree l) cs
@@ -156,6 +161,7 @@ instance AbstractSyntaxTree MStatement where
    showSubTrees l (MRead name)          = [showTree l name]
    showSubTrees l (MPrint e)            = [showTree l e]
    showSubTrees l (CodeBlock scope)     = showSubTrees l scope
+   showSubTrees l (MReturn expr)        = [showTree l expr]
 
 data MBinaryOp  = MAdd | MSub | MMul | MDiv
                 | MAnd | MOr
