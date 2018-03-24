@@ -4,3 +4,5 @@ var L:intlist;
 
 data inttree = #LEAF   of int
              | #BRANCH of inttree * inttree;
+
+fun fold(tree:inttree):inttree { return #LEAF(0); };

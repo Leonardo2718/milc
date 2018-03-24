@@ -266,7 +266,7 @@ int_factor :: { WithPos MExpression }
     | Ceil '(' expr ')'                     { emitUniOp MCeil $1 $3 }
     | Id array_dimensions                   { emitIdIn (\n -> MVar n $2) $1 }
     | Id fun_argument_list                  { emitIdIn (\n -> MCall n $2) $1 }
-    | Ctor ctor_argument_list               { emitIdIn (\n -> MCtorVal n $2) $1 }
+    | Ctor ctor_argument_list               { WithPos (MCtorVal (MIdName(token_ctor $1)) $2) (tokenPos $1) }
     | IntVal                                { emitConst IntConst token_intval $1 }
     | RealVal                               { emitConst RealConst token_realval $1 }
     | CharVal                               { emitConst CharConst token_charval $1 }
