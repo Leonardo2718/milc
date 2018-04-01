@@ -208,15 +208,19 @@ analyzeAST ast = do
             pushNewScope
             analyzeScope scope
         analyzeScope :: MScope -> MSemanticAnalyzer ()
-        analyzeScope scope = do
+        analyzeScope scope@(MScope decls _) = do
+            logMsg "Collecting scope declarations"
+            collectDecls decls
+        collectDecls :: [WithPos MDeclaration] -> MSemanticAnalyzer ()
+        collectDecls decls = do
             logMsgLn "Collecting type declarations"
-            collectDecls typeCollector scope
+            collectDeclsWith typeCollector decls
             logMsgLn "Collecting value constructors"
-            collectDecls ctorCollector scope
+            collectDeclsWith ctorCollector decls
             logMsgLn "Collecting variables and functions"
-            collectDecls varsAndFunCollector scope
-        collectDecls :: (MDeclaration -> MSemanticAnalyzer ()) -> MScope -> MSemanticAnalyzer ()
-        collectDecls collector (MScope decls _) = do
+            collectDeclsWith varsAndFunCollector decls
+        collectDeclsWith :: (MDeclaration -> MSemanticAnalyzer ()) -> [WithPos MDeclaration] -> MSemanticAnalyzer ()
+        collectDeclsWith collector decls = do
             mapM_ (mapNoPos collector) decls
             logMsgLn "SymbolTable is now:"
             logSymbolTable
