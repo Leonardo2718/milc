@@ -1,0 +1,2 @@
+fun foo():bool { return true; };
+data foo = #FOO;

@@ -1,0 +1,2 @@
+var foo:int;
+fun foo():int { return 1; };

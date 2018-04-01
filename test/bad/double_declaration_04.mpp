@@ -1,0 +1,2 @@
+var foo:int;
+data foo = #FOO;
