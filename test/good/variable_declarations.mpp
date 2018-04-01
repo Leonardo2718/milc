@@ -1,3 +1,9 @@
+data intlist = #NIL
+             | #CONS of int * intlist;
+
+data inttree = #LEAF   of int
+             | #BRANCH of inttree * inttree;
+
 var x:int;
 var y,z:int;
 var b:bool;
@@ -5,3 +11,4 @@ var A[3][3]:real;
 var c[20]:char;
 var L:intlist;
 var v1,v2[3],v4[4][3]:real;
+var t1,t2[5]:inttree;

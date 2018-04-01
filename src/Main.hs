@@ -135,7 +135,7 @@ doCompilation f getSource options = do
     logMsgLn $ concat ["======= Compiling ", sourceFile , " ======="]
     t <- parse $ LexerEnvironment {lexSource = s, lexSourceFile = f}
     -- liftIO $ print t
-    runSemanticAnalyzer analyzeAST t
+    runSemanticAnalyzer analyzeAST t (MSemanticAnalyzerEnvironment {compSource = s, compSourceFile = f})
     -- (mil, _) <- generateMil ast
     -- optMil <- optimize (OptimizerEnvironment {optLevel = milcOptLevel options}) mil
     -- targetCode <- generateRSMCode optMil

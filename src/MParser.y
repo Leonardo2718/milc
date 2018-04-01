@@ -355,7 +355,7 @@ userParseError msg t = do
             _   -> concat   [ "Parse error at ", showAlexPos pos, ":\n"
                             , "Unexpected token: ", show (tokenType t) ,"\n"
                             , if msg == "" then "" else (msg ++ "\n")
-                            , showErrorLocation source line column
+                            , showCodeAt source line column
                             ] where
                                 pos = tokenPos t
                                 AlexPn _ line column = pos

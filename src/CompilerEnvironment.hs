@@ -86,14 +86,14 @@ catchCompError :: Monad m => CompilerMonadT a m -> (String -> CompilerMonadT a m
 catchCompError = catchError
 
 -- show location in source where compilation error occurred
-showErrorLocationL :: String -> String -> Int -> Int -> String
-showErrorLocationL lead source line column = concat
+showCodeAtL :: String -> String -> Int -> Int -> String
+showCodeAtL lead source line column = concat
     [ lead, "| ", (lines source) !! (line - 1), "\n"    -- show the source line of code
     , lead, "  ", take (column - 1) $ repeat ' ', "^"   -- show cursor pointing to the error
     ]
 
-showErrorLocationI :: Int -> String -> Int -> Int -> String
-showErrorLocationI indent = showErrorLocationL (take indent $ repeat ' ')
+showCodeAtI :: Int -> String -> Int -> Int -> String
+showCodeAtI indent = showCodeAtL (take indent $ repeat ' ')
 
-showErrorLocation :: String -> Int -> Int -> String
-showErrorLocation = showErrorLocationL ""
+showCodeAt :: String -> Int -> Int -> String
+showCodeAt = showCodeAtL ""

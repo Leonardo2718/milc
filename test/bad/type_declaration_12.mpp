@@ -1,0 +1,2 @@
+data Type = #CTorA;
+data Type = #CTorB; % illegal redeclaration of type

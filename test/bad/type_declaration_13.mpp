@@ -1,0 +1,2 @@
+data Type1 = #CTor;
+data Type2 = #CTor; % illegal redeclaration of constructor

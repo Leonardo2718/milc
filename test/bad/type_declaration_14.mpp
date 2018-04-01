@@ -1,0 +1,1 @@
+data Type = #CTor | #CTor of int; % illegal redeclaration of constructor

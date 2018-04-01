@@ -1,0 +1,2 @@
+fun f(a:int):int { return 1; };
+fun f(b:real):real { return 1.0; };

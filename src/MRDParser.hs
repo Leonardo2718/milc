@@ -181,7 +181,7 @@ parseErrorAt pos msg = do
     env <- getEnv
     let AlexPn _ l c = pos
         source = parserSource env
-    logError $ concat ["Parse error at ", showAlexPos pos, ":\n", msg, "\n", showErrorLocation source l c]
+    logError $ concat ["Parse error at ", showAlexPos pos, ":\n", msg, "\n", showCodeAt source l c]
 
 -- throw parse error indicating an unexpected token was found
 badTokenError :: Token -> String -> Parser a
@@ -209,9 +209,9 @@ wrongTokenError' expected actual = do
                 Token tt' pos' = actual
                 AlexPn _ l' c' = pos'
             parseError $ concat [ "\nExpecting ", expected, " to follow ", show tt, " at ", showAlexPos pos, ":\n"
-                                , showErrorLocation source l c, "\n"
+                                , showCodeAt source l c, "\n"
                                 , "but got ", show tt', " instead at ", showAlexPos pos', ":\n"
-                                , showErrorLocation source l' c'
+                                , showCodeAt source l' c'
                                 ]
 
 -- throw parse error indicating that a specific token type was expected but that
