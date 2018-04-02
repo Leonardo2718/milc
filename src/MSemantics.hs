@@ -86,6 +86,12 @@ getEnv = do
     s <- get
     return . compEnv $ s
 
+-- return a certain field from the compilation environment
+fromEnv :: (MSemanticAnalyzerEnvironment -> a) -> MSemanticAnalyzer a
+fromEnv field = do
+    env <- getEnv
+    return . field $ env
+
 -- return a new, unique function label
 getFunctionLabel :: String -> MSemanticAnalyzer String
 getFunctionLabel name = do
@@ -178,9 +184,13 @@ logSymbolTable = do
     table <- getSymbolTable
     logBlock (showSymbolTable table)
 
+-- a generic assert mechanism on a boolean value
+assertThat :: Bool -> AlexPosn -> String -> MSemanticAnalyzer ()
+assertThat val pos msg = if val then return () else semanticError pos msg
+
 -- assert that a symbol is defined and if not, error out with given message
-assertDefined :: String -> String -> AlexPosn -> MSemanticAnalyzer ()
-assertDefined sym msg pos@(AlexPn _ l c) = do
+assertDefined :: String -> AlexPosn -> String -> MSemanticAnalyzer ()
+assertDefined sym pos@(AlexPn _ l c) msg = do
     defined <- isDefined sym
     when (not defined) throwError
     where throwError = do
@@ -191,7 +201,7 @@ assertDefined sym msg pos@(AlexPn _ l c) = do
 -- assert that if a data type is a user type, it is defined in the symbol table
 assertTypeDefined :: WithPos MType -> MSemanticAnalyzer ()
 assertTypeDefined t = case removePos t of
-    UserType tname -> assertDefined tname ("Use of undeclared type " ++ show tname) (positionOf t)
+    UserType tname -> assertDefined tname (positionOf t) ("Use of undeclared type " ++ show tname)
     _ -> return ()
 
 -- run semantic analysis on an AST instance
@@ -236,7 +246,7 @@ analyzeAST ast = do
         ctorCollector decl = case decl of
             Data tname ctors -> do
                 let typeName = mapNoPos midName tname
-                assertDefined typeName ("Expecting " ++ show typeName ++ " to have been defined but was not") (positionOf tname)
+                assertDefined typeName (positionOf tname) ("Expecting " ++ show typeName ++ " to have been defined but was not")
                 logMsgLn ("-- found data type " ++ show typeName)
                 mapM_ (visitCtor typeName) ctors
                 where
@@ -274,6 +284,100 @@ analyzeAST ast = do
                 label <- getFunctionLabel name
                 defineSymbol name pos (MFunSym params rtype label)
             _ -> return ()
+        analyzeExpr :: WithPos MExpression -> MSemanticAnalyzer MType
+        analyzeExpr expr = let pos@(AlexPn _ opl opc) = positionOf expr in case removePos expr of
+            MBinaryOp op lhs rhs -> do
+                ltype <- analyzeExpr lhs
+                rtype <- analyzeExpr rhs
+                source <- fromEnv compSource
+                let lhsPos@(AlexPn _ lhsl lhsc) = positionOf lhs
+                    rhsPos@(AlexPn _ rhsl rhsc) = positionOf rhs
+                assertThat (ltype == rtype) pos $
+                    concat  [ "Operands of ", show op, " must have the same type:\n"
+                            , showCodeAt source opl opc
+                            , "LHS has type ", show ltype, "\n"
+                            , showCodeAt source lhsl lhsc
+                            , "RHS has type ", show rtype, "\n"
+                            , showCodeAt source rhsl rhsc
+                            ]
+                if op `elem` [MAdd, MSub, MMul, MDiv, MEqual, MLessThan, MLessEqual, MGreaterThan, MGreaterEqual]
+                    then assertThat (ltype == Int || ltype == Real) pos $
+                        concat  [ "Operation ", show op, " can only be done on values of type Int and Real, not ", show ltype, "\n"
+                                , showCodeAt source opl opc
+                                ]
+                    else return ()
+                if op `elem` [MAnd, MOr]
+                    then assertThat (ltype == Bool) pos $
+                        concat  [ "Operation ", show op, " can only be done on values of type Book, not", show ltype, "\n"
+                                , showCodeAt source opl opc
+                                ]
+                    else return ()
+                if op `elem` [MEqual, MLessThan, MLessEqual, MGreaterThan, MGreaterEqual, MAnd, MOr]
+                    then return Bool
+                    else return ltype
+            MUnaryOp op sube -> do
+                subtype <- analyzeExpr sube
+                source <- fromEnv compSource
+                let subpos@(AlexPn _ subl subc) = positionOf sube
+                    assertTypeIn ts = assertThat (subtype `elem` ts) subpos $
+                        concat  [ "Operand type of ", show op, " must be one of ", show ts, ", not ", show subtype, "\n"
+                                , showCodeAt source subl subc
+                                ]
+                case op of
+                    MNeg -> assertTypeIn [Int, Real] >> return subtype
+                    MNot -> assertTypeIn [Bool] >> return Bool
+                    MFloat -> assertTypeIn [Int] >> return Real
+                    MFloor -> assertTypeIn [Real] >> return Int
+                    MCeil -> assertTypeIn [Real] >> return Int
+            -- MSize _ _ ->
+            MCall (MIdName name) args -> do
+                entry <- lookupSymbol name
+                source <- fromEnv compSource
+                case entry of
+                    Just (MSymbolEntry _ _ (MFunSym _ rt _)) -> mapM_ analyzeExpr args >> return rt
+                    Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
+                        concat  [show name, " is not a function:\n"
+                                , showCodeAt source opl opc
+                                , "declared at ", showAlexPos declPos, ":\n"
+                                , showCodeAt source l c
+                                ]
+                    Nothing -> semanticError pos $ concat ["No function named ", show name, "\n", showCodeAt source opl opc]
+            MCtorVal (MIdName name) args -> do
+                entry <- lookupSymbol name
+                source <- fromEnv compSource
+                case entry of
+                    Just (MSymbolEntry _ _ (MCtorSym _ tt)) -> mapM_ analyzeExpr args >> return (UserType tt)
+                    Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
+                        concat  [show name, " is not a value constructor:\n"
+                                , showCodeAt source opl opc
+                                , "declared at ", showAlexPos declPos, ":\n"
+                                , showCodeAt source l c
+                                ]
+                    Nothing -> semanticError pos $ concat ["No value constructor named ", show name, "\n", showCodeAt source opl opc]
+            MVar (MIdName name) dims -> do
+                entry <- lookupSymbol name
+                source <- fromEnv compSource
+                case entry of
+                    Just (MSymbolEntry _ _ (MVarSym tt ds)) -> do
+                        assertThat (length dims == ds) pos $
+                            concat  [ "Variable ", show name, " has ", show ds, " dimensions, not ", show (length dims)
+                                    , showCodeAt source opl opc
+                                    ]
+                        mapM_ analyzeExpr dims
+                        return tt
+                    Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
+                        concat  [ show name, " is not a value constructor:\n"
+                                , showCodeAt source opl opc
+                                , "declared at ", showAlexPos declPos, ":\n"
+                                , showCodeAt source l c
+                                ]
+                    Nothing -> semanticError pos $ concat ["No value constructor named ", show name, "\n", showCodeAt source opl opc]
+            MConst c -> case c of
+                IntConst _ -> return Int
+                RealConst _ -> return Real
+                CharConst _ -> return Char
+                BoolConst _ -> return Bool
+
 -- run semantic analysis in a compiler monad instance
 runSemanticAnalyzer :: Monad m => (AST -> MSemanticAnalyzer a) -> AST -> MSemanticAnalyzerEnvironment -> CompilerMonadT (a, MSemanticAnalyzerState) m
 runSemanticAnalyzer analyzer ast env = do
