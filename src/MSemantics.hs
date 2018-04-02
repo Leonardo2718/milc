@@ -329,7 +329,17 @@ analyzeAST ast = do
                     MFloat -> assertTypeIn [Int] >> return Real
                     MFloor -> assertTypeIn [Real] >> return Int
                     MCeil -> assertTypeIn [Real] >> return Int
-            -- MSize _ _ ->
+            MSize (MIdName name) dims -> do
+                entry <- lookupSymbol name
+                source <- fromEnv compSource
+                case entry of
+                    Just (MSymbolEntry _ _ (MVarSym _ ds)) -> do
+                        assertThat (dims == ds) pos $
+                            concat  [ "Variable ", show name, " has ", show ds, " dimensions, not ", show dims
+                                    , showCodeAt source opl opc
+                                    , "Did you mean `", name, concat (take ds (repeat "[]")) ,"`"
+                                    ]
+                        return Int
             MCall (MIdName name) args -> do
                 entry <- lookupSymbol name
                 source <- fromEnv compSource
