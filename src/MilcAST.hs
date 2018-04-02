@@ -80,7 +80,7 @@ data MType  = Int
             | Real
             | Char
             | Bool
-            | UserType String
+            | UserType {typeName :: String}
             deriving (Eq, Show)
 instance AbstractSyntaxTree MType where
     nameOf = show
