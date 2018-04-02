@@ -197,8 +197,8 @@ prog_stmt :: { WithPos MStatement }
     | Print expr                            { WithPos (MPrint $2) (tokenPos $1) }
     | '{' block '}'                         { WithEndPos (CodeBlock $2) (tokenPos $1) (tokenPos $3) }
 
-location :: { WithPos MIdentifier }
-    : Id array_dimensions   { emitId $1 }
+location :: { WithPos MLocation }
+    : Id array_dimensions   { WithPos (MLocation (token_idname $1) $2) (tokenPos $1) }
 
 case_list :: { [WithPos MCase] }
     : case more_case    { $1:$2 }

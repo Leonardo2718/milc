@@ -136,12 +136,17 @@ instance AbstractSyntaxTree MCase where
     nameOf (MCase _ _) = "MCase"
     showSubTrees l (MCase dtor stmt) = [showTree l dtor, showTree l stmt]
 
+data MLocation = MLocation {locName :: String, locOffsets :: [WithPos MExpression]}
+instance AbstractSyntaxTree MLocation where
+    nameOf (MLocation name offsets) = name ++ concat (take (length offsets) (repeat "[]"))
+    showSubTrees l (MLocation _ offsets) = map (showTree l) offsets
+
 -- AST data type of statements
 data MStatement = IfThenElse {stmtExpr :: WithPos MExpression, thenBranch :: WithPos MStatement, elseBranch :: WithPos MStatement}
                 | WhileDo {stmtExpr :: WithPos MExpression, doStmt :: WithPos MStatement}
                 | CaseOf {stmtExpr :: WithPos MExpression, cases :: [WithPos MCase]}
-                | Assign {destID :: WithPos MIdentifier, stmtExpr :: WithPos MExpression}
-                | MRead {destID :: WithPos MIdentifier}
+                | Assign {destID :: WithPos MLocation, stmtExpr :: WithPos MExpression}
+                | MRead {destID :: WithPos MLocation}
                 | MPrint {printExpr :: WithPos MExpression}
                 | CodeBlock {blockBody :: MScope}
                 | MReturn {returnExpr :: WithPos MExpression}
