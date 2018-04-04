@@ -80,3 +80,12 @@ forwardAnd c a = c >> return a
 infixl 1 =>>
 (=>>) :: Monad m => m a -> m b -> m a
 a =>> b = a >>= forwardAnd b
+
+-- binds to monadic values containing lists by creating a new monadic value
+-- concatinating the two lists
+infixl 1 >+>
+(>+>) :: Monad m => m [a] -> m [a] -> m [a]
+a >+> b =  do
+    l1 <- a
+    l2 <- b
+    return (l1 ++ l2)

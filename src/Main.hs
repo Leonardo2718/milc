@@ -31,6 +31,7 @@ import CompilerEnvironment
 import MLexer
 import MParser
 import MSemantics
+import MIL
 -- import MRDParser
 -- import MILGenerator
 -- import MEncoder
@@ -135,7 +136,8 @@ doCompilation f getSource options = do
     logMsgLn $ concat ["======= Compiling ", sourceFile , " ======="]
     t <- parse $ LexerEnvironment {lexSource = s, lexSourceFile = f}
     -- liftIO $ print t
-    runSemanticAnalyzer analyzeAST t (MSemanticAnalyzerEnvironment {compSource = s, compSourceFile = f})
+    (_, state) <- runSemanticAnalyzer analyzeAST t (MSemanticAnalyzerEnvironment {compSource = s, compSourceFile = f})
+    logMil . generatedMil $ state
     -- (mil, _) <- generateMil ast
     -- optMil <- optimize (OptimizerEnvironment {optLevel = milcOptLevel options}) mil
     -- targetCode <- generateRSMCode optMil

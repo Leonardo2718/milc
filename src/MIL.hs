@@ -38,19 +38,32 @@ import Data.List
 type Symbol = String
 
 -- MIL binary operations
-data BinaryOp = AddOp | SubOp | MulOp | DivOp deriving (Eq, Show)
+data BinaryOp = AddOp | SubOp | MulOp | DivOp | EQOp | LTOp | LEOp | GTOp | GEOp | AndOp | OrOp deriving (Eq, Show)
+
+-- MIL unary operations
+data UnaryOp = NegativeOp | BooleanNotOp | FloatOp | FloorOp | CeilingOp deriving (Eq, Show)
+
+-- MIL data types
+data MilType = MilI32 | MilF32 | MilChar | MilBool deriving (Eq, Show)
 
 -- MIL value representation
-data MilValue   = BinaryOp BinaryOp MilValue MilValue   -- result of binary operation
-                | Const Int                             -- constant value
-                | Load Symbol                           -- result of loading a symbol
+data MilValue   = BinaryOp MilType BinaryOp MilValue MilValue   -- result of binary operation
+                | UnaryOp MilType UnaryOp MilValue              -- result of unary operation
+                | ConstI32 Int                                  -- constant 32-bit integer value
+                | ConstF32 Float                                -- constant 32-bit floating point value (IEEE-754)
+                | ConstChar Char                                -- constant character value
+                | ConstBool Bool                                -- constant boolean value
+                | Load MilType Symbol                           -- result of loading a variable
+                -- | StackLoad MilValue                            -- result of loading a value from the stack
+                -- | HeapLoad MilValue                             -- result of loading a value from the heap
+                | Call MilType Symbol [MilValue]                -- result of calling a function
                 deriving (Eq, Show)
 
 -- MIL opcodes
-data OpCode = Read Symbol
-            | Print MilValue
+data OpCode = Read MilType Symbol
+            | Print MilType MilValue
             | Store Symbol MilValue
-            | Call Symbol [MilValue]
+            -- | Call (Maybe Symbol) Symbol [MilValue]
             deriving (Eq, Show)
 
 -- MIL basic block ID
@@ -70,8 +83,13 @@ data BasicBlock = BasicBlock    { blockId :: BlockId
                                 , blockTerm :: Terminator
                                 }
 
+-- MIL function representation
+data Function = Function    { functionLabel :: String
+                            , functionBody :: [BasicBlock]
+                            }
+
 -- top level MIL data type
-data Mil = Mil [BasicBlock]
+data Mil = Mil [Function]
 
 -- MIL data type instantiations
 instance Show BasicBlock where
@@ -87,20 +105,26 @@ instance Show BasicBlock where
         showWithPadding = (\ s -> padding ++ s) . show
         padding = "    "
 
+instance Show Function where
+    show (Function label body) = concat [label, "\n", concat (take (length label) (repeat "=")), "\n", showBBs body]
+
 instance Show Mil where
-    show (Mil bbs) = showMil bbs
+    show (Mil funs) = intercalate "\n" (map show funs)
 
 -- show string representation of MIL code
-showMil :: [BasicBlock] -> String
-showMil bbs = intercalate "\n" . map show $ bbs
+showBBs :: [BasicBlock] -> String
+showBBs bbs = intercalate "\n" . map show $ bbs
 
 -- helper for logging blocks of MIL
-logMil :: Monad m => [BasicBlock] -> CompilerMonadT () m
-logMil = logBlock . showMil
+logBBs :: Monad m => [BasicBlock] -> CompilerMonadT () m
+logBBs = logBlock . showBBs
 
 -- helper for logging the first n lines of blocks of MIL
-logMilLines :: Monad m => Int -> [BasicBlock] -> CompilerMonadT () m
-logMilLines n = logBlockLines n . showMil
+logBBLines :: Monad m => Int -> [BasicBlock] -> CompilerMonadT () m
+logBBLines n = logBlockLines n . showBBs
+
+logMil :: Monad m => Mil -> CompilerMonadT () m
+logMil = logBlock . show
 
 -- helper for merging to basic blocks correctly
 --

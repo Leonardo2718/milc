@@ -30,6 +30,7 @@ import CompilerEnvironment
 import MilcUtils
 import MLexer
 import MilcAST
+import MIL
 
 import Data.HashMap.Strict as HashMap
 import Data.List
@@ -42,7 +43,11 @@ data MSymbolInfo = MVarSym {symType :: MType, symDimension :: Int}
                  | MTypeSym
                  | MCtorSym {ctorArgTypes :: [MType], resultTypeName :: String}
                  deriving (Show, Eq)
-data MSymbolEntry = MSymbolEntry {symName :: String, declPos :: AlexPosn, symInfo :: MSymbolInfo}
+data MSymbolEntry = MSymbolEntry
+    { symName :: String
+    , declPos :: AlexPosn
+    , symInfo :: MSymbolInfo
+    }
 type MSymbolScope = HashMap.HashMap String MSymbolEntry
 type MSymbolTable = [MSymbolScope]
 
@@ -63,14 +68,16 @@ data MSemanticAnalyzerEnvironment = MSemanticAnalyzerEnvironment
     }
 data MSemanticAnalyzerState = MSemanticAnalyzerState
     { symbolTable :: MSymbolTable               -- symbol table
+    , generatedMil :: Mil                       -- the generated IL
     , functionLabelCounter :: Int               -- counter for generating unique function labels
+    , basicBlockIdCounter :: BlockId            -- counter for generating unique basic block ids
     , compEnv :: MSemanticAnalyzerEnvironment   -- compilation environment
     }
 type MSemanticAnalyzer a = CompilerMonadT a (State MSemanticAnalyzerState)
 
 -- initial state of the semantic analyzer
 initSemanticAnalyzer :: MSemanticAnalyzerEnvironment -> MSemanticAnalyzerState
-initSemanticAnalyzer = MSemanticAnalyzerState [] 0
+initSemanticAnalyzer = MSemanticAnalyzerState [] (Mil []) 0 0
 
 -- initial value of a new scope entry in the symbol table
 newScope :: MSymbolScope
@@ -100,6 +107,14 @@ getFunctionLabel name = do
     put s{functionLabelCounter=counter+1}
     return (name ++ "_" ++ show counter)
 
+-- generate a new basic block
+newBasicBlock :: [OpCode] -> Terminator -> MSemanticAnalyzer BasicBlock
+newBasicBlock opcodes terminator = do
+    s <- get
+    let bbid = basicBlockIdCounter s
+    put s{basicBlockIdCounter=bbid+1}
+    return $ BasicBlock bbid opcodes terminator
+
 -- return current symbol table from the stats
 getSymbolTable :: MSemanticAnalyzer MSymbolTable
 getSymbolTable = do
@@ -128,6 +143,14 @@ pushScope scope = do
 -- push a new (empty) scope onto the symbol table
 pushNewScope :: MSemanticAnalyzer ()
 pushNewScope = pushScope newScope
+
+-- push IL function
+pushMilFunction :: Function -> MSemanticAnalyzer ()
+pushMilFunction f = do
+    s <- get
+    let Mil fs = generatedMil s
+        mil = Mil (f:fs)
+    put s{generatedMil=mil}
 
 -- recursively check if a symbol is in the symbol table
 isDefined :: String -> MSemanticAnalyzer Bool
@@ -204,6 +227,14 @@ assertTypeDefined t = case removePos t of
     UserType tname -> assertDefined tname (positionOf t) ("Use of undeclared type " ++ show tname)
     _ -> return ()
 
+unimplementedFeatureError :: AlexPosn -> MSemanticAnalyzer a
+unimplementedFeatureError pos@(AlexPn _ l c) = do
+    source <- fromEnv compSource
+    semanticError pos $ concat
+        [ "Use of unimplemented language feature:\n"
+        , showCodeAt source l c
+        ]
+
 -- run semantic analysis on an AST instance
 analyzeAST :: AST -> MSemanticAnalyzer ()
 analyzeAST ast = do
@@ -221,52 +252,56 @@ analyzeAST ast = do
         analyzeScope scope@(MScope decls stmts) = do
             logMsg "Collecting scope declarations"
             collectDecls decls
-            analyzeStatements stmts
-        analyzeStatements :: [WithPos MStatement] -> MSemanticAnalyzer ()
-        analyzeStatements [] = return ()
-        analyzeStatements (stmt:stmts) = do
-            let pos = positionOf stmt
-            case removePos stmt of
+            bbs <- analyzeStatements stmts
+            logBBs bbs
+        analyzeStatements :: [WithPos MStatement] -> MSemanticAnalyzer [BasicBlock]
+        analyzeStatements [] = return []
+        analyzeStatements (stmt:stmts) = analyze >+> analyzeStatements stmts where
+            pos = positionOf stmt
+            analyze :: MSemanticAnalyzer [BasicBlock]
+            analyze = case removePos stmt of
                 IfThenElse expr thenStmt elseStmt -> do
                     analyzeExpr expr
-                    analyzeStatements [thenStmt]
-                    analyzeStatements [elseStmt]
+                    analyzeStatements [thenStmt] >+> analyzeStatements [elseStmt]
                 WhileDo expr bodyStmt -> analyzeExpr expr >> analyzeStatements [bodyStmt]
-                CaseOf expr cases -> analyzeCases expr cases
-                Assign loc expr -> analyzeLoc loc >> analyzeExpr expr >> return ()
+                -- CaseOf expr cases -> analyzeCases expr cases
+                Assign loc expr -> analyzeLoc loc >> analyzeExpr expr >> return []
                 MRead loc -> analyzeLoc loc
-                MPrint expr -> analyzeExpr expr >> return ()
-                CodeBlock scope -> pushNewScope >> analyzeScope scope >> popScope >> return ()
-                MReturn expr -> analyzeExpr expr >> return ()
-            analyzeStatements stmts
-            where
-                analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer ()
-                analyzeLoc (WithPos (MLocation name offsets) pos@(AlexPn _ l c)) = do
-                    source <- fromEnv compSource
-                    assertDefined name pos $ concat ["No variable named ", show name, "\n", showCodeAt source l c]
-                    mapM_ analyzeExpr offsets
-                analyzeCases :: WithPos MExpression -> [WithPos MCase] -> MSemanticAnalyzer ()
-                analyzeCases _ [] = return ()
-                analyzeCases expr (WithPos (MCase (MDtor name dtorargs) stmts) pos@(AlexPn _ l c):cases) = do
-                    exprT <- analyzeExpr expr
-                    entry <- lookupSymbol name
-                    source <- fromEnv compSource
-                    case entry of
-                        Just (MSymbolEntry _ _ (MCtorSym _ dtorT)) -> do
-                            assertThat (typeName exprT == dtorT) pos $
-                                concat  ["Type of case (",typeName exprT,") and type of expression case (",dtorT,") do not match. Case is:\n"
-                                        , showCodeAt source l c, "\n"
-                                        , "Expression is:\n"
-                                        , let (AlexPn _ l c) = positionOf expr in showCodeAt source l c, "\n"
-                                        ]
-                        Just (MSymbolEntry _ declPos@(AlexPn _ decll declc) _) -> semanticError pos $
-                            concat  [show name, " is not a value constructor:\n"
-                                    , showCodeAt source l c, "\n"
-                                    , "declared at ", showAlexPos declPos, ":\n"
-                                    , showCodeAt source decll declc
-                                    ]
-                        Nothing -> semanticError pos $ concat ["No value constructor named ", show name, "\n", showCodeAt source l c]
-                    analyzeCases expr cases
+                MPrint expr -> do
+                    (t, v) <- analyzeExpr expr
+                    bb <- newBasicBlock [Print (toMilType t) v] Fallthrough
+                    return [bb]
+                CodeBlock scope -> pushNewScope >> analyzeScope scope >> popScope >> return []
+                MReturn expr -> analyzeExpr expr >> return []
+                _ -> unimplementedFeatureError (positionOf stmt)
+            analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer [BasicBlock]
+            analyzeLoc (WithPos (MLocation name offsets) pos@(AlexPn _ l c)) = do
+                source <- fromEnv compSource
+                assertDefined name pos $ concat ["No variable named ", show name, "\n", showCodeAt source l c]
+                mapM_ analyzeExpr offsets
+                return []
+            -- analyzeCases :: WithPos MExpression -> [WithPos MCase] -> MSemanticAnalyzer [[BasicBlock]]
+            -- analyzeCases _ [] = return []
+            -- analyzeCases expr (WithPos (MCase (MDtor name dtorargs) stmts) pos@(AlexPn _ l c):cases) = do
+            --     exprT <- analyzeExpr expr
+            --     entry <- lookupSymbol name
+            --     source <- fromEnv compSource
+            --     case entry of
+            --         Just (MSymbolEntry _ _ (MCtorSym _ dtorT)) -> do
+            --             assertThat (typeName exprT == dtorT) pos $
+            --                 concat  ["Type of case (",typeName exprT,") and type of expression case (",dtorT,") do not match. Case is:\n"
+            --                         , showCodeAt source l c, "\n"
+            --                         , "Expression is:\n"
+            --                         , let (AlexPn _ l c) = positionOf expr in showCodeAt source l c, "\n"
+            --                         ]
+            --         Just (MSymbolEntry _ declPos@(AlexPn _ decll declc) _) -> semanticError pos $
+            --             concat  [show name, " is not a value constructor:\n"
+            --                     , showCodeAt source l c, "\n"
+            --                     , "declared at ", showAlexPos declPos, ":\n"
+            --                     , showCodeAt source decll declc
+            --                     ]
+            --         Nothing -> semanticError pos $ concat ["No value constructor named ", show name, "\n", showCodeAt source l c]
+            --     analyzeCases expr cases
         collectDecls :: [WithPos MDeclaration] -> MSemanticAnalyzer ()
         collectDecls decls = do
             logMsgLn "Collecting type declarations"
@@ -341,10 +376,12 @@ analyzeAST ast = do
                     pos = positionOf n
                 assertDefined name pos $
                     concat ["Function ", show name , " is not in the symbol table!!!"]
+                Just (MSymbolEntry _ _ (MFunSym _ _ label)) <- lookupSymbol name
                 pushNewScope
                 collectParams params
                 collectDecls decls
                 analyzeStatements stmts
+                pushMilFunction (Function label [])
                 popScope
                 return ()
                 where
@@ -356,11 +393,11 @@ analyzeAST ast = do
                         defineSymbol pname ppos (MVarSym (removePos ptype) pdim)
                         collectParams paramDecls
             _ -> return ()
-        analyzeExpr :: WithPos MExpression -> MSemanticAnalyzer MType
+        analyzeExpr :: WithPos MExpression -> MSemanticAnalyzer (MType, MilValue)
         analyzeExpr expr = let pos@(AlexPn _ opl opc) = positionOf expr in case removePos expr of
             MBinaryOp op lhs rhs -> do
-                ltype <- analyzeExpr lhs
-                rtype <- analyzeExpr rhs
+                (ltype, lval) <- analyzeExpr lhs
+                (rtype, rval) <- analyzeExpr rhs
                 source <- fromEnv compSource
                 let lhsPos@(AlexPn _ lhsl lhsc) = positionOf lhs
                     rhsPos@(AlexPn _ rhsl rhsc) = positionOf rhs
@@ -372,58 +409,101 @@ analyzeAST ast = do
                             , "RHS has type ", show rtype, "\n"
                             , showCodeAt source rhsl rhsc
                             ]
-                if op `elem` [MAdd, MSub, MMul, MDiv, MEqual, MLessThan, MLessEqual, MGreaterThan, MGreaterEqual]
-                    then assertThat (ltype == Int || ltype == Real) pos $
-                        concat  [ "Operation ", show op, " can only be done on values of type Int and Real, not ", show ltype, "\n"
+                let toMilOp o = case o of
+                        MAdd -> AddOp
+                        MSub -> SubOp
+                        MMul -> MulOp
+                        MDiv -> DivOp
+                        MEqual -> EQOp
+                        MLessThan -> LTOp
+                        MLessEqual -> LEOp
+                        MGreaterThan -> GTOp
+                        MGreaterEqual -> GEOp
+                        MAnd -> AndOp
+                        MOr -> OrOp
+                if (op `elem` [MAdd, MSub, MMul, MDiv])
+                    then do
+                        assertThat (ltype == Int || ltype == Real) pos $ concat
+                            [ "Operation ", show op, " can only be done on values of type Int and Real, not ", show ltype, "\n"
+                            , showCodeAt source opl opc
+                            ]
+                        return (ltype, BinaryOp (toMilType ltype) (toMilOp op) lval rval)
+                    else if (op `elem` [MEqual, MLessThan, MLessEqual, MGreaterThan, MGreaterEqual])
+                        then do
+                            assertThat (ltype == Int || ltype == Real) pos $ concat
+                                [ "Operation ", show op, " can only be done on values of type Int and Real, not ", show ltype, "\n"
                                 , showCodeAt source opl opc
                                 ]
-                    else return ()
-                if op `elem` [MAnd, MOr]
-                    then assertThat (ltype == Bool) pos $
-                        concat  [ "Operation ", show op, " can only be done on values of type Book, not", show ltype, "\n"
-                                , showCodeAt source opl opc
-                                ]
-                    else return ()
-                if op `elem` [MEqual, MLessThan, MLessEqual, MGreaterThan, MGreaterEqual, MAnd, MOr]
-                    then return Bool
-                    else return ltype
+                            return (Bool, BinaryOp MilBool (toMilOp op) lval rval)
+                        else if (op `elem` [MAnd, MOr])
+                            then do
+                                assertThat (ltype == Bool) pos $ concat
+                                    [ "Operation ", show op, " can only be done on values of type Book, not", show ltype, "\n"
+                                    , showCodeAt source opl opc
+                                    ]
+                                return (Bool, BinaryOp MilBool (toMilOp op) lval rval)
+                            else unimplementedFeatureError pos
             MUnaryOp op sube -> do
-                subtype <- analyzeExpr sube
+                (subType, subVal) <- analyzeExpr sube
                 source <- fromEnv compSource
                 let subpos@(AlexPn _ subl subc) = positionOf sube
-                    assertTypeIn ts = assertThat (subtype `elem` ts) subpos $
-                        concat  [ "Operand type of ", show op, " must be one of ", show ts, ", not ", show subtype, "\n"
+                    assertTypeIn ts = assertThat (subType `elem` ts) subpos $
+                        concat  [ "Operand type of ", show op, " must be one of ", show ts, ", not ", show subType, "\n"
                                 , showCodeAt source subl subc
                                 ]
                 case op of
-                    MNeg -> assertTypeIn [Int, Real] >> return subtype
-                    MNot -> assertTypeIn [Bool] >> return Bool
-                    MFloat -> assertTypeIn [Int] >> return Real
-                    MFloor -> assertTypeIn [Real] >> return Int
-                    MCeil -> assertTypeIn [Real] >> return Int
-            MSize (MIdName name) dims -> do
-                entry <- lookupSymbol name
-                source <- fromEnv compSource
-                case entry of
-                    Just (MSymbolEntry _ _ (MVarSym _ ds)) -> do
-                        assertThat (dims == ds) pos $
-                            concat  [ "Variable ", show name, " has ", show ds, " dimensions, not ", show dims
-                                    , showCodeAt source opl opc, "\n"
-                                    , "Did you mean `", name, concat (take ds (repeat "[]")) ,"`"
-                                    ]
-                        return Int
-                    Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
-                        concat  [show name, " is not a variable:\n"
-                                , showCodeAt source opl opc, "\n"
-                                , "declared at ", showAlexPos declPos, ":\n"
-                                , showCodeAt source l c
-                                ]
-                    Nothing -> semanticError pos $ concat ["No variable named ", show name, "\n", showCodeAt source opl opc]
+                    MNeg -> do assertTypeIn [Int, Real] >> return (subType, UnaryOp (toMilType subType) NegativeOp subVal)
+                    MNot -> assertTypeIn [Bool] >> return (Bool, UnaryOp MilBool BooleanNotOp subVal)
+                    MFloat -> assertTypeIn [Int] >> return (Real, UnaryOp MilF32 FloatOp subVal)
+                    MFloor -> assertTypeIn [Real] >> return (Int, UnaryOp MilI32 FloorOp subVal)
+                    MCeil -> assertTypeIn [Real] >> return (Int, UnaryOp MilI32 CeilingOp subVal)
+            -- MSize (MIdName name) dims -> do
+            --     entry <- lookupSymbol name
+            --     source <- fromEnv compSource
+            --     case entry of
+            --         Just (MSymbolEntry _ _ (MVarSym _ ds)) -> do
+            --             assertThat (dims == ds) pos $
+            --                 concat  [ "Variable ", show name, " has ", show ds, " dimensions, not ", show dims
+            --                         , showCodeAt source opl opc, "\n"
+            --                         , "Did you mean `", name, concat (take ds (repeat "[]")) ,"`"
+            --                         ]
+            --             return Int
+            --         Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
+            --             concat  [show name, " is not a variable:\n"
+            --                     , showCodeAt source opl opc, "\n"
+            --                     , "declared at ", showAlexPos declPos, ":\n"
+            --                     , showCodeAt source l c
+            --                     ]
+            --         Nothing -> semanticError pos $ concat ["No variable named ", show name, "\n", showCodeAt source opl opc]
             MCall (MIdName name) args -> do
                 entry <- lookupSymbol name
                 source <- fromEnv compSource
                 case entry of
-                    Just (MSymbolEntry _ _ (MFunSym _ rt _)) -> mapM_ analyzeExpr args >> return rt
+                    Just (MSymbolEntry _ declPos@(AlexPn _ decll declc) (MFunSym paramt rt label)) -> do
+                        assertThat (length args == length paramt) pos $ concat
+                            [ "Function ", show name, " expects ", show (length paramt)
+                            , " arguments but ", show (length args), " were given\n"
+                            , showCodeAt source opl opc
+                            ]
+                        args' <- mapM analyzeExpr args
+                        assertArgsMatch 0 args' paramt
+                        return (rt, Call (toMilType rt) label (Data.List.map snd args'))
+                        where
+                            assertArgsMatch :: Int -> [(MType, MilValue)] -> [(MType, Int)] -> MSemanticAnalyzer ()
+                            assertArgsMatch _ [] [] = return ()
+                            assertArgsMatch i ((argT,_):argTs) ((paramT, _):params) = do
+                                let argPos@(AlexPn _ argl argc) = positionOf (args !! i)
+                                    pos@(AlexPn _ l c) = positionOf expr
+                                assertThat (argT == paramT) argPos $ concat
+                                    [ "Argument ", show i, " has type ", show argT
+                                    , " but function ", show name, " expects ", show paramT, ":\n"
+                                    , showCodeAt source argl argc, "\n"
+                                    , "function call at:\n"
+                                    , showCodeAt source l c, "\n"
+                                    , "Function declared at:\n"
+                                    , showCodeAt source decll declc, "\n"
+                                    ]
+                                assertArgsMatch (i+1) argTs params
                     Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
                         concat  [show name, " is not a function:\n"
                                 , showCodeAt source opl opc, "\n"
@@ -431,18 +511,18 @@ analyzeAST ast = do
                                 , showCodeAt source l c
                                 ]
                     Nothing -> semanticError pos $ concat ["No function named ", show name, "\n", showCodeAt source opl opc]
-            MCtorVal (MIdName name) args -> do
-                entry <- lookupSymbol name
-                source <- fromEnv compSource
-                case entry of
-                    Just (MSymbolEntry _ _ (MCtorSym _ tt)) -> mapM_ analyzeExpr args >> return (UserType tt)
-                    Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
-                        concat  [show name, " is not a value constructor:\n"
-                                , showCodeAt source opl opc, "\n"
-                                , "declared at ", showAlexPos declPos, ":\n"
-                                , showCodeAt source l c
-                                ]
-                    Nothing -> semanticError pos $ concat ["No value constructor named ", show name, "\n", showCodeAt source opl opc]
+            -- MCtorVal (MIdName name) args -> do
+            --     entry <- lookupSymbol name
+            --     source <- fromEnv compSource
+            --     case entry of
+            --         Just (MSymbolEntry _ _ (MCtorSym _ tt)) -> mapM_ analyzeExpr args >> return (UserType tt)
+            --         Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
+            --             concat  [show name, " is not a value constructor:\n"
+            --                     , showCodeAt source opl opc, "\n"
+            --                     , "declared at ", showAlexPos declPos, ":\n"
+            --                     , showCodeAt source l c
+            --                     ]
+            --         Nothing -> semanticError pos $ concat ["No value constructor named ", show name, "\n", showCodeAt source opl opc]
             MVar (MIdName name) dims -> do
                 entry <- lookupSymbol name
                 source <- fromEnv compSource
@@ -453,7 +533,7 @@ analyzeAST ast = do
                                     , showCodeAt source opl opc
                                     ]
                         mapM_ analyzeExpr dims
-                        return tt
+                        return (tt, Load (toMilType tt) name)
                     Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
                         concat  [ show name, " is not a variable:\n"
                                 , showCodeAt source opl opc, "\n"
@@ -462,10 +542,17 @@ analyzeAST ast = do
                                 ]
                     Nothing -> semanticError pos $ concat ["No variable named ", show name, "\n", showCodeAt source opl opc]
             MConst c -> case c of
-                IntConst _ -> return Int
-                RealConst _ -> return Real
-                CharConst _ -> return Char
-                BoolConst _ -> return Bool
+                IntConst val -> return (Int, ConstI32 val)
+                RealConst val -> return (Real, ConstF32 val)
+                CharConst val -> return (Char, ConstChar val)
+                BoolConst val -> return (Bool, ConstBool val)
+            _ -> unimplementedFeatureError pos
+        toMilType :: MType -> MilType
+        toMilType t = case t of
+            Int -> MilI32
+            Real -> MilF32
+            Char -> MilChar
+            Bool -> MilBool
 
 -- run semantic analysis in a compiler monad instance
 runSemanticAnalyzer :: Monad m => (AST -> MSemanticAnalyzer a) -> AST -> MSemanticAnalyzerEnvironment -> CompilerMonadT (a, MSemanticAnalyzerState) m
