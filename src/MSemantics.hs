@@ -288,6 +288,7 @@ analyzeAST ast = do
                     logMsgLn "-- analyzing Read statement"
                     logTreeLines 4 stmt
                     analyzeLoc loc
+                    return []
                 MPrint expr -> do
                     logMsgLn "-- analyzing Print statement"
                     logTreeLines 4 stmt
@@ -304,15 +305,16 @@ analyzeAST ast = do
                 MReturn expr -> do
                     logMsgLn "-- analyzing Return statement"
                     logTreeLines 4 stmt
-                    analyzeExpr expr
-                    return []
+                    (t, v) <- analyzeExpr expr
+                    bb <- newBasicBlock [] (Return (Just (toMilType t, v)))
+                    return [bb]
                 _ -> unimplementedFeatureError (positionOf stmt)
-            analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer [BasicBlock]
+            analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer ()
             analyzeLoc (WithPos (MLocation name offsets) pos@(AlexPn _ l c)) = do
                 source <- fromEnv compSource
                 assertDefined name pos $ concat ["No variable named ", show name, "\n", showCodeAt source l c]
                 mapM_ analyzeExpr offsets
-                return []
+                return ()
             -- analyzeCases :: WithPos MExpression -> [WithPos MCase] -> MSemanticAnalyzer [[BasicBlock]]
             -- analyzeCases _ [] = return []
             -- analyzeCases expr (WithPos (MCase (MDtor name dtorargs) stmts) pos@(AlexPn _ l c):cases) = do
@@ -406,7 +408,7 @@ analyzeAST ast = do
                 logMsgLn "-- found function declaration"
                 source <- fromEnv compSource
                 let name = mapNoPos midName n
-                    pos = positionOf n
+                    pos@(AlexPn _ l c) = positionOf n
                 assertDefined name pos $
                     concat ["Function ", show name , " is not in the symbol table!!!"]
                 Just (MSymbolEntry _ _ (MFunSym _ _ label)) <- lookupSymbol name
@@ -417,8 +419,8 @@ analyzeAST ast = do
                 logMsgLn "Collecting local function declarations"
                 collectDecls decls
                 logMsgLn "Anallyzing function body"
-                analyzeStatements stmts
-                let fbody = Function label []
+                bbs <- analyzeStatements stmts
+                let fbody = Function label bbs
                 pushMilFunction fbody
                 logMsgLn "Generated MIL for function body:"
                 logFunction fbody
@@ -432,6 +434,14 @@ analyzeAST ast = do
                         assertTypeDefined ptype
                         defineSymbol pname ppos (MVarSym (removePos ptype) pdim)
                         collectParams paramDecls
+                    checkReturnType :: BasicBlock -> MSemanticAnalyzer ()
+                    checkReturnType (BasicBlock _ _ (Return (Just (t, _)))) = do
+                        let p@(AlexPn _ l c) = positionOf rt
+                        source <- fromEnv compSource
+                        assertThat (t == mapNoPos toMilType rt) p $ concat
+                            [ "Return expression is of type ", show t, "but function expects ", mapNoPos show rt, "\n"
+                            , showCodeAt source l c
+                            ]
             _ -> return ()
         analyzeExpr :: WithPos MExpression -> MSemanticAnalyzer (MType, MilValue)
         analyzeExpr expr = let pos@(AlexPn _ opl opc) = positionOf expr in logMsgLn "-- Analyzing sub-expression" >> case removePos expr of

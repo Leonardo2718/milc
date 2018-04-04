@@ -63,6 +63,7 @@ data MilValue   = BinaryOp MilType BinaryOp MilValue MilValue   -- result of bin
 data OpCode = Read MilType Symbol
             | Print MilType MilValue
             | Store Symbol MilValue
+            | StoreIndirect Symbol MilValue MilValue
             -- | Call (Maybe Symbol) Symbol [MilValue]
             deriving (Eq, Show)
 
@@ -74,7 +75,7 @@ data Terminator = Jump {jumpTarget :: BlockId}
                 | Branch {jumpCondition :: MilValue, jumpTarget :: BlockId}
                 | BranchZero {jumpCondition :: MilValue, jumpTarget :: BlockId}
                 | Fallthrough
-                | Return {returnValue :: Maybe MilValue}
+                | Return {returnValue :: Maybe (MilType, MilValue)}
                 deriving (Eq, Show)
 
 -- MIL basic block representation
