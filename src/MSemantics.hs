@@ -130,8 +130,11 @@ setSymbolTable t = do
 -- pop a scope from the symbol table
 popScope :: MSemanticAnalyzer MSymbolScope
 popScope = do
+    logMsgLn "-- poping scope from symbol table"
     scope:table <- getSymbolTable
     setSymbolTable table
+    logMsgLn "-- symbol table is now:"
+    logSymbolTable
     return scope
 
 -- push a given scope onto the symbol table
@@ -142,7 +145,7 @@ pushScope scope = do
 
 -- push a new (empty) scope onto the symbol table
 pushNewScope :: MSemanticAnalyzer ()
-pushNewScope = pushScope newScope
+pushNewScope = logMsgLn "-- pushing new scope to symbol table" >> pushScope newScope
 
 -- push IL function
 pushMilFunction :: Function -> MSemanticAnalyzer ()
@@ -248,11 +251,15 @@ analyzeAST ast = do
             logMsgLn "Analyzing global scope"
             pushNewScope
             analyzeScope scope
+            popScope
+            return ()
         analyzeScope :: MScope -> MSemanticAnalyzer ()
         analyzeScope scope@(MScope decls stmts) = do
-            logMsg "Collecting scope declarations"
+            logMsgLn "Collecting scope declarations"
             collectDecls decls
+            logMsgLn "Analyzing statements"
             bbs <- analyzeStatements stmts
+            logMsgLn "Generated MIL for current scope:"
             logBBs bbs
         analyzeStatements :: [WithPos MStatement] -> MSemanticAnalyzer [BasicBlock]
         analyzeStatements [] = return []
@@ -261,18 +268,44 @@ analyzeAST ast = do
             analyze :: MSemanticAnalyzer [BasicBlock]
             analyze = case removePos stmt of
                 IfThenElse expr thenStmt elseStmt -> do
+                    logMsgLn "-- analyzing IfThenElse statement"
+                    logTreeLines 4 stmt
                     analyzeExpr expr
                     analyzeStatements [thenStmt] >+> analyzeStatements [elseStmt]
-                WhileDo expr bodyStmt -> analyzeExpr expr >> analyzeStatements [bodyStmt]
+                WhileDo expr bodyStmt -> do
+                    logMsgLn "-- analyzing WhileDo statement"
+                    logTreeLines 4 stmt
+                    analyzeExpr expr
+                    analyzeStatements [bodyStmt]
                 -- CaseOf expr cases -> analyzeCases expr cases
-                Assign loc expr -> analyzeLoc loc >> analyzeExpr expr >> return []
-                MRead loc -> analyzeLoc loc
+                Assign loc expr -> do
+                    logMsgLn "-- analyzing Assign statement"
+                    logTreeLines 4 stmt
+                    analyzeLoc loc
+                    analyzeExpr expr
+                    return []
+                MRead loc -> do
+                    logMsgLn "-- analyzing Read statement"
+                    logTreeLines 4 stmt
+                    analyzeLoc loc
                 MPrint expr -> do
+                    logMsgLn "-- analyzing Print statement"
+                    logTreeLines 4 stmt
                     (t, v) <- analyzeExpr expr
                     bb <- newBasicBlock [Print (toMilType t) v] Fallthrough
                     return [bb]
-                CodeBlock scope -> pushNewScope >> analyzeScope scope >> popScope >> return []
-                MReturn expr -> analyzeExpr expr >> return []
+                CodeBlock scope -> do
+                    logMsgLn "-- analyzing Block statement"
+                    logTreeLines 4 stmt
+                    pushNewScope
+                    analyzeScope scope
+                    popScope
+                    return []
+                MReturn expr -> do
+                    logMsgLn "-- analyzing Return statement"
+                    logTreeLines 4 stmt
+                    analyzeExpr expr
+                    return []
                 _ -> unimplementedFeatureError (positionOf stmt)
             analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer [BasicBlock]
             analyzeLoc (WithPos (MLocation name offsets) pos@(AlexPn _ l c)) = do
@@ -315,7 +348,7 @@ analyzeAST ast = do
         collectDeclsWith :: (MDeclaration -> MSemanticAnalyzer ()) -> [WithPos MDeclaration] -> MSemanticAnalyzer ()
         collectDeclsWith collector decls = do
             mapM_ (mapNoPos collector) decls
-            logMsgLn "SymbolTable is now:"
+            logMsgLn "-- symbol table is now:"
             logSymbolTable
         typeCollector :: MDeclaration -> MSemanticAnalyzer ()
         typeCollector decl = case decl of
@@ -378,10 +411,17 @@ analyzeAST ast = do
                     concat ["Function ", show name , " is not in the symbol table!!!"]
                 Just (MSymbolEntry _ _ (MFunSym _ _ label)) <- lookupSymbol name
                 pushNewScope
+                logMsgLn "Collecting function parameters"
                 collectParams params
+                logMsgLn "-- symbol table is now"
+                logMsgLn "Collecting local function declarations"
                 collectDecls decls
+                logMsgLn "Anallyzing function body"
                 analyzeStatements stmts
-                pushMilFunction (Function label [])
+                let fbody = Function label []
+                pushMilFunction fbody
+                logMsgLn "Generated MIL for function body:"
+                logFunction fbody
                 popScope
                 return ()
                 where
@@ -394,8 +434,10 @@ analyzeAST ast = do
                         collectParams paramDecls
             _ -> return ()
         analyzeExpr :: WithPos MExpression -> MSemanticAnalyzer (MType, MilValue)
-        analyzeExpr expr = let pos@(AlexPn _ opl opc) = positionOf expr in case removePos expr of
+        analyzeExpr expr = let pos@(AlexPn _ opl opc) = positionOf expr in logMsgLn "-- Analyzing sub-expression" >> case removePos expr of
             MBinaryOp op lhs rhs -> do
+                logMsgLn "-- analyzing binary operation"
+                logTreeLines 4 expr
                 (ltype, lval) <- analyzeExpr lhs
                 (rtype, rval) <- analyzeExpr rhs
                 source <- fromEnv compSource
@@ -444,6 +486,8 @@ analyzeAST ast = do
                                 return (Bool, BinaryOp MilBool (toMilOp op) lval rval)
                             else unimplementedFeatureError pos
             MUnaryOp op sube -> do
+                logMsgLn "-- analyzing unary operation"
+                logTreeLines 3 expr
                 (subType, subVal) <- analyzeExpr sube
                 source <- fromEnv compSource
                 let subpos@(AlexPn _ subl subc) = positionOf sube
@@ -476,6 +520,8 @@ analyzeAST ast = do
             --                     ]
             --         Nothing -> semanticError pos $ concat ["No variable named ", show name, "\n", showCodeAt source opl opc]
             MCall (MIdName name) args -> do
+                logMsgLn "-- analyzing call operation"
+                logTreeLines 4 expr
                 entry <- lookupSymbol name
                 source <- fromEnv compSource
                 case entry of
@@ -524,6 +570,8 @@ analyzeAST ast = do
             --                     ]
             --         Nothing -> semanticError pos $ concat ["No value constructor named ", show name, "\n", showCodeAt source opl opc]
             MVar (MIdName name) dims -> do
+                logMsgLn "-- analyzing variable use"
+                logTreeLines 4 expr
                 entry <- lookupSymbol name
                 source <- fromEnv compSource
                 case entry of
@@ -541,11 +589,14 @@ analyzeAST ast = do
                                 , showCodeAt source l c
                                 ]
                     Nothing -> semanticError pos $ concat ["No variable named ", show name, "\n", showCodeAt source opl opc]
-            MConst c -> case c of
-                IntConst val -> return (Int, ConstI32 val)
-                RealConst val -> return (Real, ConstF32 val)
-                CharConst val -> return (Char, ConstChar val)
-                BoolConst val -> return (Bool, ConstBool val)
+            MConst c -> do
+                logMsgLn "-- found literal constant"
+                logTree expr
+                case c of
+                    IntConst val -> return (Int, ConstI32 val)
+                    RealConst val -> return (Real, ConstF32 val)
+                    CharConst val -> return (Char, ConstChar val)
+                    BoolConst val -> return (Bool, ConstBool val)
             _ -> unimplementedFeatureError pos
         toMilType :: MType -> MilType
         toMilType t = case t of

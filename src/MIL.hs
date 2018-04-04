@@ -126,6 +126,9 @@ logBBLines n = logBlockLines n . showBBs
 logMil :: Monad m => Mil -> CompilerMonadT () m
 logMil = logBlock . show
 
+logFunction :: Monad m => Function -> CompilerMonadT () m
+logFunction = logBlock . show
+
 -- helper for merging to basic blocks correctly
 --
 -- Given two basic blocks:
