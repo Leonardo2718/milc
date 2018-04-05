@@ -157,7 +157,7 @@ countVariables = do
     scope <- getTopScope
     let vars = HashMap.filter isVar scope
         isVar sym = case symInfo sym of
-            MVarSym _ _ _ -> True
+            MVarSym _ _ _ MVariable -> True
             _ -> False
     return . size $ vars
 
@@ -167,7 +167,7 @@ countParameters = do
     scope <- getTopScope
     let vars = HashMap.filter isVar scope
         isVar sym = case symInfo sym of
-            MParamSym _ _ _ -> True
+            MVarSym _ _ _ MParameter -> True
             _ -> False
     return . size $ vars
 
@@ -345,15 +345,15 @@ analyzeAST ast = do
                 Assign loc expr -> do
                     logMsgLn "-- analyzing Assign statement"
                     logTreeLines 4 stmt
-                    op <- analyzeLoc loc
+                    (tt, name, offset, link) <- analyzeLoc loc
                     analyzeExpr expr
-                    bb <- newBasicBlock [op] Fallthrough
+                    bb <- newBasicBlock [StoreOffset tt name offset link] Fallthrough
                     return [bb]
                 MRead loc -> do
                     logMsgLn "-- analyzing Read statement"
                     logTreeLines 4 stmt
-                    op <- analyzeLoc loc
-                    bb <- newBasicBlock [op] Fallthrough
+                    (tt, name, offset, link) <- analyzeLoc loc
+                    bb <- newBasicBlock [Read tt name offset link] Fallthrough
                     return [bb]
                 MPrint expr -> do
                     logMsgLn "-- analyzing Print statement"
@@ -378,7 +378,7 @@ analyzeAST ast = do
                     bb <- newBasicBlock [] (Return (Just (toMilType t, v)))
                     return [bb]
                 _ -> unimplementedFeatureError (positionOf stmt)
-            analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer OpCode
+            analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer (MilType, Symbol, MilValue, MilValue)
             analyzeLoc (WithPos (MLocation name dims) pos@(AlexPn _ l c)) = do
                 source <- fromEnv compSource
                 -- assertDefined name pos $ concat ["No variable named ", show name, "\n", showCodeAt source l c]
@@ -390,7 +390,7 @@ analyzeAST ast = do
                                     , showCodeAt source l c
                                     ]
                         mapM_ analyzeExpr dims
-                        return (StoreOffset (toMilType tt) name (ConstI32 off) (ConstI32 level))
+                        return (toMilType tt, name, ConstI32 off, ConstI32 level)
                     MSymbolEntry _ declPos@(AlexPn _ l' c') _ -> semanticError pos $
                         concat  [ show name, " is not a variable:\n"
                                 , showCodeAt source l c, "\n"
