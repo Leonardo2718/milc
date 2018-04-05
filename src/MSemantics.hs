@@ -202,6 +202,17 @@ lookupSymbol sym = do
             Just e -> Just e
             Nothing -> tableLookup sym ss
 
+lookupWithLevel :: String -> MSemanticAnalyzer (Maybe (MSymbolEntry, Int))
+lookupWithLevel sym = do
+    table <- getSymbolTable
+    return . tableLookup 0 sym $ table
+    where
+        tableLookup :: Int -> String -> MSymbolTable -> Maybe (MSymbolEntry, Int)
+        tableLookup _ _ [] = Nothing
+        tableLookup i sym (s:ss) = case HashMap.lookup sym s of
+            Just e -> Just (e, i)
+            Nothing -> tableLookup (i+1) sym ss
+
 -- define a new symbol in the current scope of the symbol table
 defineSymbol :: String -> AlexPosn -> MSymbolInfo -> MSemanticAnalyzer ()
 defineSymbol sym pos info = do
@@ -600,37 +611,33 @@ analyzeAST ast = do
                                 , showCodeAt source l c
                                 ]
                     Nothing -> semanticError pos $ concat ["No function named ", show name, "\n", showCodeAt source opl opc]
-            -- MCtorVal (MIdName name) args -> do
-            --     entry <- lookupSymbol name
-            --     source <- fromEnv compSource
-            --     case entry of
-            --         Just (MSymbolEntry _ _ (MCtorSym _ tt)) -> mapM_ analyzeExpr args >> return (UserType tt)
-            --         Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
-            --             concat  [show name, " is not a value constructor:\n"
-            --                     , showCodeAt source opl opc, "\n"
-            --                     , "declared at ", showAlexPos declPos, ":\n"
-            --                     , showCodeAt source l c
-            --                     ]
-            --         Nothing -> semanticError pos $ concat ["No value constructor named ", show name, "\n", showCodeAt source opl opc]
             MVar (MIdName name) dims -> do
                 logMsgLn "-- analyzing variable use"
                 logTreeLines 4 expr
-                entry <- lookupSymbol name
+                tentry <- lookupWithLevel name
                 source <- fromEnv compSource
-                case entry of
-                    Just (MSymbolEntry _ _ (MVarSym tt _ ds)) -> do
-                        assertThat (length dims == ds) pos $
-                            concat  [ "Variable ", show name, " has ", show ds, " dimensions, not ", show (length dims)
-                                    , showCodeAt source opl opc
+                case tentry of
+                    Just (entry, level) -> case entry of
+                        MSymbolEntry _ _ (MVarSym tt off ds) -> do
+                            assertThat (length dims == ds) pos $
+                                concat  [ "Variable ", show name, " has ", show ds, " dimensions, not ", show (length dims)
+                                        , showCodeAt source opl opc
+                                        ]
+                            mapM_ analyzeExpr dims
+                            return (tt, LoadOffset (toMilType tt) name (ConstI32 off) (ConstI32 level))
+                        MSymbolEntry _ _ (MParamSym tt off ds) -> do
+                            assertThat (length dims == ds) pos $
+                                concat  [ "Function parameter ", show name, " has ", show ds, " dimensions, not ", show (length dims)
+                                        , showCodeAt source opl opc
+                                        ]
+                            mapM_ analyzeExpr dims
+                            return (tt, LoadOffset (toMilType tt) name (ConstI32 off) (ConstI32 level))
+                        MSymbolEntry _ declPos@(AlexPn _ l c) _ -> semanticError pos $
+                            concat  [ show name, " is not a variable:\n"
+                                    , showCodeAt source opl opc, "\n"
+                                    , "declared at ", showAlexPos declPos, ":\n"
+                                    , showCodeAt source l c
                                     ]
-                        mapM_ analyzeExpr dims
-                        return (tt, Load (toMilType tt) name)
-                    Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
-                        concat  [ show name, " is not a variable:\n"
-                                , showCodeAt source opl opc, "\n"
-                                , "declared at ", showAlexPos declPos, ":\n"
-                                , showCodeAt source l c
-                                ]
                     Nothing -> semanticError pos $ concat ["No variable named ", show name, "\n", showCodeAt source opl opc]
             MConst c -> do
                 logMsgLn "-- found literal constant"

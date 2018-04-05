@@ -58,7 +58,7 @@ data MilValue   = BinaryOp MilType BinaryOp MilValue MilValue   -- result of bin
                     { valueType :: MilType
                     , valueName :: Symbol
                     , valueOffset :: MilValue
-                    -- , staticLink :: MilValue
+                    , valueStaticLink :: MilValue
                     }
                 -- | StackLoad MilValue                            -- result of loading a value from the stack
                 -- | HeapLoad MilValue                             -- result of loading a value from the heap
@@ -69,7 +69,12 @@ data MilValue   = BinaryOp MilType BinaryOp MilValue MilValue   -- result of bin
 data OpCode = Read MilType Symbol
             | Print MilType MilValue
             | Store Symbol MilValue
-            | StoreOffset Symbol MilType MilValue MilValue
+            | StoreOffset
+                { destName :: Symbol
+                , destType :: MilType
+                , destOffset :: MilValue
+                , destStaticLink :: MilValue
+                }
             -- | Call (Maybe Symbol) Symbol [MilValue]
             deriving (Eq, Show)
 
