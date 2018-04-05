@@ -334,14 +334,33 @@ analyzeAST ast = do
                 IfThenElse expr thenStmt elseStmt -> do
                     logMsgLn "-- analyzing IfThenElse statement"
                     logTreeLines 4 stmt
-                    analyzeExpr expr
-                    analyzeStatements [thenStmt] >+> analyzeStatements [elseStmt]
+                    (tt, condition) <- analyzeExpr expr
+                    source <- fromEnv compSource
+                    assertThat (tt == Bool) (positionOf expr) $ concat
+                        [ "Condition for IfThenElse block must be of type Bool, not ", show tt, "\n"
+                        , let AlexPn _ l c = positionOf expr in showCodeAt source l c
+                        ]
+                    thenBody <- analyzeStatements [thenStmt]
+                    elseBody <- analyzeStatements [elseStmt]
+                    mergePoint <- newBasicBlock [] Fallthrough
+                    thenExit <- newBasicBlock [] (Jump (blockId mergePoint))
+                    elseHead <- newBasicBlock [] Fallthrough
+                    conditionCheck <- newBasicBlock [] (BranchZero condition (blockId elseHead))
+                    return (conditionCheck:thenBody ++ [thenExit] ++ elseHead:elseBody ++ [mergePoint])
                 WhileDo expr bodyStmt -> do
                     logMsgLn "-- analyzing WhileDo statement"
                     logTreeLines 4 stmt
-                    analyzeExpr expr
-                    analyzeStatements [bodyStmt]
-                -- CaseOf expr cases -> analyzeCases expr cases
+                    (tt, condition) <- analyzeExpr expr
+                    source <- fromEnv compSource
+                    assertThat (tt == Bool) (positionOf expr) $ concat
+                        [ "Condition for WhileDo block must be of type Bool, not ", show tt, "\n"
+                        , let AlexPn _ l c = positionOf expr in showCodeAt source l c
+                        ]
+                    mergePoint <- newBasicBlock [] Fallthrough
+                    conditionCheck <- newBasicBlock [] (BranchZero condition (blockId mergePoint))
+                    loopBody <- analyzeStatements [bodyStmt]
+                    jumpBack <- newBasicBlock [] (Jump (blockId conditionCheck))
+                    return (conditionCheck:loopBody ++ [jumpBack, mergePoint])
                 Assign loc expr -> do
                     logMsgLn "-- analyzing Assign statement"
                     logTreeLines 4 stmt
