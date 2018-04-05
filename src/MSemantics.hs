@@ -312,12 +312,16 @@ analyzeAST ast = do
             logMsgLn "Analyzing AST"
             logMsgLn "Analyzing global scope"
             pushNewScope
-            analyzeScope scope
+            prog <- analyzeScope scope
+            let mainf = Function "__main__" prog
+            pushMilFunction mainf
+            logMsgLn "Generated MIL for main function:"
+            logFunction mainf
             logMsgLn "-- poping scope from symbol table"
             popScope
             logMsgLn "-- symbol table is now:"
             logSymbolTable
-        analyzeScope :: MScope -> MSemanticAnalyzer ()
+        analyzeScope :: MScope -> MSemanticAnalyzer [BasicBlock]
         analyzeScope scope@(MScope decls stmts) = do
             logMsgLn "Collecting scope declarations"
             collectDecls decls
@@ -325,6 +329,7 @@ analyzeAST ast = do
             bbs <- analyzeStatements stmts
             logMsgLn "Generated MIL for current scope:"
             logBBs bbs
+            return bbs
         analyzeStatements :: [WithPos MStatement] -> MSemanticAnalyzer [BasicBlock]
         analyzeStatements [] = return []
         analyzeStatements (stmt:stmts) = analyze >+> analyzeStatements stmts where
@@ -384,12 +389,12 @@ analyzeAST ast = do
                     logMsgLn "-- analyzing Block statement"
                     logTreeLines 4 stmt
                     pushNewScope
-                    analyzeScope scope
+                    bbs <- analyzeScope scope
                     logMsgLn "-- poping scope from symbol table"
                     popScope
                     logMsgLn "-- symbol table is now:"
                     logSymbolTable
-                    return []
+                    return bbs
                 MReturn expr -> do
                     logMsgLn "-- analyzing Return statement"
                     logTreeLines 4 stmt

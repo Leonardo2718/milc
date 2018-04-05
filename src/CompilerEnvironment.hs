@@ -85,6 +85,13 @@ compError = throwError
 catchCompError :: Monad m => CompilerMonadT a m -> (String -> CompilerMonadT a m) -> CompilerMonadT a m
 catchCompError = catchError
 
+errorOnNothing :: Monad m => String -> CompilerMonadT (Maybe a) m -> CompilerMonadT a m
+errorOnNothing msg c = do
+    a <- c
+    case a of
+        Just a' -> return a'
+        Nothing -> compError msg
+
 -- show location in source where compilation error occurred
 showCodeAtL :: String -> String -> Int -> Int -> String
 showCodeAtL lead source line column = concat
