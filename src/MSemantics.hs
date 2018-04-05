@@ -37,8 +37,8 @@ import Data.List
 import Control.Monad.State
 import Control.Monad
 
-data MSymbolInfo = MVarSym {symType :: MType, symDimension :: Int}
-                 | MParamSym {symType :: MType, symDimension :: Int}
+data MSymbolInfo = MVarSym {symType :: MType, symOffset :: Int, symDimension :: Int}
+                 | MParamSym {symType :: MType, symOffset :: Int, symDimension :: Int}
                  | MFunSym {funArgTypes :: [(MType, Int)], returnType :: MType, functionLabel :: String}
                  | MTypeSym
                  | MCtorSym {ctorArgTypes :: [MType], resultTypeName :: String}
@@ -127,14 +127,18 @@ setSymbolTable t = do
     s <- get
     put s{symbolTable = t}
 
+-- get scope at the top of the scope stack
+getTopScope :: MSemanticAnalyzer MSymbolScope
+getTopScope = do
+    table <- getSymbolTable
+    when (length table == 0) (logError "Attempting to access scope when none is currently defined")
+    return . head $ table
+
 -- pop a scope from the symbol table
 popScope :: MSemanticAnalyzer MSymbolScope
 popScope = do
-    logMsgLn "-- poping scope from symbol table"
     scope:table <- getSymbolTable
     setSymbolTable table
-    logMsgLn "-- symbol table is now:"
-    logSymbolTable
     return scope
 
 -- push a given scope onto the symbol table
@@ -146,6 +150,26 @@ pushScope scope = do
 -- push a new (empty) scope onto the symbol table
 pushNewScope :: MSemanticAnalyzer ()
 pushNewScope = logMsgLn "-- pushing new scope to symbol table" >> pushScope newScope
+
+-- count the number of variables defined in the current scope
+countVariables :: MSemanticAnalyzer Int
+countVariables = do
+    scope <- getTopScope
+    let vars = HashMap.filter isVar scope
+        isVar sym = case symInfo sym of
+            MVarSym _ _ _ -> True
+            _ -> False
+    return . size $ vars
+
+-- count the number of parameters defined in the current scope
+countParameters :: MSemanticAnalyzer Int
+countParameters = do
+    scope <- getTopScope
+    let vars = HashMap.filter isVar scope
+        isVar sym = case symInfo sym of
+            MParamSym _ _ _ -> True
+            _ -> False
+    return . size $ vars
 
 -- push IL function
 pushMilFunction :: Function -> MSemanticAnalyzer ()
@@ -251,8 +275,10 @@ analyzeAST ast = do
             logMsgLn "Analyzing global scope"
             pushNewScope
             analyzeScope scope
+            logMsgLn "-- poping scope from symbol table"
             popScope
-            return ()
+            logMsgLn "-- symbol table is now:"
+            logSymbolTable
         analyzeScope :: MScope -> MSemanticAnalyzer ()
         analyzeScope scope@(MScope decls stmts) = do
             logMsgLn "Collecting scope declarations"
@@ -300,7 +326,10 @@ analyzeAST ast = do
                     logTreeLines 4 stmt
                     pushNewScope
                     analyzeScope scope
+                    logMsgLn "-- poping scope from symbol table"
                     popScope
+                    logMsgLn "-- symbol table is now:"
+                    logSymbolTable
                     return []
                 MReturn expr -> do
                     logMsgLn "-- analyzing Return statement"
@@ -389,7 +418,8 @@ analyzeAST ast = do
                         let name = mapNoPos varName v
                             dims = mapNoPos (length . varDims) v
                             pos = positionOf v
-                        defineSymbol name pos (MVarSym (removePos t) dims)
+                        i <- countVariables
+                        defineSymbol name pos (MVarSym (removePos t) (i+1) dims)
             Fun n rt ps _ _ -> do
                 logMsgLn "-- found function declaration"
                 assertTypeDefined rt
@@ -424,15 +454,18 @@ analyzeAST ast = do
                 pushMilFunction fbody
                 logMsgLn "Generated MIL for function body:"
                 logFunction fbody
+                logMsgLn "-- poping scope from symbol table"
                 popScope
-                return ()
+                logMsgLn "-- symbol table is now:"
+                logSymbolTable
                 where
                     collectParams :: [WithPos MParamDecl] -> MSemanticAnalyzer ()
                     collectParams [] = return ()
                     collectParams (WithPos (MParamDecl pname pdim ptype) ppos:paramDecls) = do
                         logMsgLn "-- found parameter"
                         assertTypeDefined ptype
-                        defineSymbol pname ppos (MVarSym (removePos ptype) pdim)
+                        i <- countParameters
+                        defineSymbol pname ppos (MParamSym (removePos ptype) (i+1) pdim)
                         collectParams paramDecls
                     checkReturnType :: BasicBlock -> MSemanticAnalyzer ()
                     checkReturnType (BasicBlock _ _ (Return (Just (t, _)))) = do
@@ -585,7 +618,7 @@ analyzeAST ast = do
                 entry <- lookupSymbol name
                 source <- fromEnv compSource
                 case entry of
-                    Just (MSymbolEntry _ _ (MVarSym tt ds)) -> do
+                    Just (MSymbolEntry _ _ (MVarSym tt _ ds)) -> do
                         assertThat (length dims == ds) pos $
                             concat  [ "Variable ", show name, " has ", show ds, " dimensions, not ", show (length dims)
                                     , showCodeAt source opl opc
