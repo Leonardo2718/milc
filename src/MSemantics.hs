@@ -37,8 +37,8 @@ import Data.List
 import Control.Monad.State
 import Control.Monad
 
-data MSymbolInfo = MVarSym {symType :: MType, symOffset :: Int, symDimension :: Int}
-                 | MParamSym {symType :: MType, symOffset :: Int, symDimension :: Int}
+data MVariableKind = MVariable | MParameter deriving (Show, Eq)
+data MSymbolInfo = MVarSym {varType :: MType, varOffset :: Int, varDimension :: Int, varKind :: MVariableKind}
                  | MFunSym {funArgTypes :: [(MType, Int)], returnType :: MType, functionLabel :: String}
                  | MTypeSym
                  | MCtorSym {ctorArgTypes :: [MType], resultTypeName :: String}
@@ -384,16 +384,9 @@ analyzeAST ast = do
                 -- assertDefined name pos $ concat ["No variable named ", show name, "\n", showCodeAt source l c]
                 (entry, level) <- lookupWithLevel "symbol" name pos
                 op <- case entry of
-                    MSymbolEntry _ _ (MVarSym tt off ds) -> do
+                    MSymbolEntry _ _ (MVarSym tt off ds k) -> do
                         assertThat (length dims == ds) pos $
-                            concat  [ "Variable ", show name, " has ", show ds, " dimensions, not ", show (length dims)
-                                    , showCodeAt source l c
-                                    ]
-                        mapM_ analyzeExpr dims
-                        return (StoreOffset (toMilType tt) name (ConstI32 off) (ConstI32 level))
-                    MSymbolEntry _ _ (MParamSym tt off ds) -> do
-                        assertThat (length dims == ds) pos $
-                            concat  [ "Function parameter ", show name, " has ", show ds, " dimensions, not ", show (length dims)
+                            concat  [ show k, show name, " has ", show ds, " dimensions, not ", show (length dims)
                                     , showCodeAt source l c
                                     ]
                         mapM_ analyzeExpr dims
@@ -481,7 +474,7 @@ analyzeAST ast = do
                             dims = mapNoPos (length . varDims) v
                             pos = positionOf v
                         i <- countVariables
-                        defineSymbol name pos (MVarSym (removePos t) (i+1) dims)
+                        defineSymbol name pos (MVarSym (removePos t) (i+1) dims MVariable)
             Fun n rt ps _ _ -> do
                 logMsgLn "-- found function declaration"
                 assertTypeDefined rt
@@ -527,7 +520,7 @@ analyzeAST ast = do
                         logMsgLn "-- found parameter"
                         assertTypeDefined ptype
                         i <- countParameters
-                        defineSymbol pname ppos (MParamSym (removePos ptype) (i+1) pdim)
+                        defineSymbol pname ppos (MVarSym (removePos ptype) (i+1) pdim MParameter)
                         collectParams paramDecls
                     checkReturnType :: BasicBlock -> MSemanticAnalyzer ()
                     checkReturnType (BasicBlock _ _ (Return (Just (t, _)))) = do
@@ -668,16 +661,9 @@ analyzeAST ast = do
                 (entry, level) <- lookupWithLevel "symbol" name pos
                 source <- fromEnv compSource
                 case entry of
-                    MSymbolEntry _ _ (MVarSym tt off ds) -> do
+                    MSymbolEntry _ _ (MVarSym tt off ds k) -> do
                         assertThat (length dims == ds) pos $
-                            concat  [ "Variable ", show name, " has ", show ds, " dimensions, not ", show (length dims)
-                                    , showCodeAt source opl opc
-                                    ]
-                        mapM_ analyzeExpr dims
-                        return (tt, LoadOffset (toMilType tt) name (ConstI32 off) (ConstI32 level))
-                    MSymbolEntry _ _ (MParamSym tt off ds) -> do
-                        assertThat (length dims == ds) pos $
-                            concat  [ "Function parameter ", show name, " has ", show ds, " dimensions, not ", show (length dims)
+                            concat  [ show k, show name, " has ", show ds, " dimensions, not ", show (length dims)
                                     , showCodeAt source opl opc
                                     ]
                         mapM_ analyzeExpr dims
