@@ -48,18 +48,29 @@ data OptimizerEnvironment = OptimizerEnvironment
 optimize :: Monad m => OptimizerEnvironment -> Mil -> CompilerMonadT Mil m
 optimize env mil = do
     logMsgLn $ "=== Running Optimizations (level " ++ show (optLevel env) ++ ") ==="
-    let optimizations = intersperse logInterMil $ case optLevel env of
-            0 -> [ forwardAnd $ logMsgLn "%%%% No optimizations to perform %%%%"
+    let logOpt opt f@(Function label _) = do
+            logMsgLn $ concat ["%%%%% Optimizing ", show label, " %%%%%"]
+            logFunction f
+            f' <- opt f
+            logMsgLn $ concat ["%%%%% Optimization for ", show label, " complete %%%%%"]
+            logFunction f'
+            return f'
+        applyOpt :: Monad m => (Function -> CompilerMonadT Function m) -> Mil -> CompilerMonadT Mil m
+        applyOpt opt (Mil funs) = do
+            funs' <- mapM (logOpt opt) funs
+            return (Mil funs)
+        optimizations :: Monad m => [Function -> CompilerMonadT Function m]
+        optimizations = case optLevel env of
+            0 -> [
+                 ]
+            1 -> [ basicBlockMerging
                  ]
             _ -> [ basicBlockMerging
-                 , localValueSimplification
-                 , forwardAnd $ logMsgLn "%%%% All optimizations complete %%%%"
+                 -- , localValueSimplification
                  ]
-        logInterMil mil@(Mil bbs) = do
-            logMsgLn "%%%% Resulting MIL %%%%"
-            logMil bbs
-            return mil
-    foldl (>>=) (return mil) optimizations
+    mil' <- foldl (>>=) (return mil) (Data.List.map applyOpt optimizations)
+    logMsgLn "=== All optimization complete ==="
+    return mil'
 
 -- merge all basic blocks that can be safely merged
 --
@@ -75,14 +86,14 @@ optimize env mil = do
 --  A-->B---->CD--->E-->F
 --
 --
-basicBlockMerging :: Monad m => Mil -> CompilerMonadT Mil m
-basicBlockMerging mil@(Mil bbs) = do
-    logMsgLn "%%%% Performing: Basic Block Merging %%%%"
+basicBlockMerging :: Monad m => Function -> CompilerMonadT Function m
+basicBlockMerging mil@(Function label bbs) = do
+    logMsgLn "%%% Performing: Basic Block Merging %%%"
     logMsgLn "-- building CFG"
     cfg <- buildCFG mil
     logCFG cfg
     bbs' <- mergeBlocks cfg bbs
-    return (Mil bbs')
+    return (Function label bbs')
     where
         mergeBlocks :: Monad m => CFG -> [BasicBlock] -> CompilerMonadT [BasicBlock] m
         mergeBlocks _ [bb] = return [bb]
@@ -99,6 +110,7 @@ basicBlockMerging mil@(Mil bbs) = do
                     return $ mergeBasicBlocks bb1 bb2 : bbs'
                 False -> return $ bb1:bb2:bbs'
 
+{-
 -- state for local copy propagation
 --
 -- The `copyTable` field is a map of symbol names to MIL values. The table keeps
@@ -114,15 +126,15 @@ type LocalValueSimplification a = CompilerMonadT a LocalValueSimplificationState
 --  * local copy propagation
 --  * constant folding
 --  * basic strength reduction
-localValueSimplification :: Monad m => Mil -> CompilerMonadT Mil m
+localValueSimplification :: Monad m => Function -> CompilerMonadT Function m
 localValueSimplification mil = do
     let (a, s) = runState (runCompilerT (doValueSimplification mil)) (LocalValueSimplificationState HashMap.empty)
     mil' <- compiler a
     return mil'
     where
         -- just simplify values in the contianed basic blocks
-        doValueSimplification :: Mil -> LocalValueSimplification Mil
-        doValueSimplification mil@(Mil bbs) = do
+        doValueSimplification :: Function -> LocalValueSimplification Function
+        doValueSimplification mil@(Function _ bbs) = do
             logMsgLn "%%%% Performing: Local Value Simplification %%%%"
             bbs' <- mapM (\bb -> simplifyInBlock bb =>> resetCopyTable) bbs
             return $ Mil bbs'
@@ -315,3 +327,4 @@ localValueSimplification mil = do
             let t = copyTable s
                 v = HashMap.lookup sym t
             return v
+-}
