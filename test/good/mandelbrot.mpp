@@ -18,7 +18,7 @@ while (py < 46) do {
         iteration := 0;
         max := 1000;
         while ((x*x + y*y < 2.0*2.0) && (iteration < max)) do {
-            var xtemp:int;
+            var xtemp:real;
             xtemp := x*x - y*y + x0;
             y := 2.0*x*y + y0;
             x := xtemp;

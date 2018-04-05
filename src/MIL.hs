@@ -79,6 +79,7 @@ data OpCode = Read
                 , destName :: Symbol
                 , destOffset :: MilValue
                 , destStaticLink :: MilValue
+                , targetVal :: MilValue
                 }
             -- | Call (Maybe Symbol) Symbol [MilValue]
             deriving (Eq, Show)

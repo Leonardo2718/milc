@@ -369,14 +369,25 @@ analyzeAST ast = do
                 Assign loc expr -> do
                     logMsgLn "-- analyzing Assign statement"
                     logTreeLines 4 stmt
-                    (tt, name, offset, link) <- analyzeLoc loc
-                    analyzeExpr expr
-                    bb <- newBasicBlock [StoreOffset tt name offset link] Fallthrough
+                    (vart, tt, name, offset, link) <- analyzeLoc loc
+                    symEntry <- lookupSymbol "symbol" name (positionOf loc)
+                    (exprt, val) <- analyzeExpr expr
+                    source <- fromEnv compSource
+                    assertThat (vart == exprt) (positionOf loc) $ concat
+                        [ "Cannot assign value of type ", show exprt, " to variable of type ", show vart, "\n"
+                        , "Expression at ", showAlexPos (positionOf expr), ":\n"
+                        , let AlexPn _ l c = positionOf expr in showCodeAt source l c, "\n"
+                        , "Variable assigned at ", showAlexPos (positionOf loc), "\n"
+                        , let AlexPn _ l c = positionOf loc in showCodeAt source l c, "\n"
+                        , "Variable declared at ", showAlexPos (declPos symEntry), "\n"
+                        , let AlexPn _ l c = declPos symEntry in showCodeAt source l c, "\n"
+                        ]
+                    bb <- newBasicBlock [StoreOffset tt name offset link val] Fallthrough
                     return [bb]
                 MRead loc -> do
                     logMsgLn "-- analyzing Read statement"
                     logTreeLines 4 stmt
-                    (tt, name, offset, link) <- analyzeLoc loc
+                    (_, tt, name, offset, link) <- analyzeLoc loc
                     bb <- newBasicBlock [Read tt name offset link] Fallthrough
                     return [bb]
                 MPrint expr -> do
@@ -402,7 +413,7 @@ analyzeAST ast = do
                     bb <- newBasicBlock [] (Return (Just (toMilType t, v)))
                     return [bb]
                 _ -> unimplementedFeatureError (positionOf stmt)
-            analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer (MilType, Symbol, MilValue, MilValue)
+            analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer (MType, MilType, Symbol, MilValue, MilValue)
             analyzeLoc (WithPos (MLocation name dims) pos@(AlexPn _ l c)) = do
                 source <- fromEnv compSource
                 -- assertDefined name pos $ concat ["No variable named ", show name, "\n", showCodeAt source l c]
@@ -414,7 +425,7 @@ analyzeAST ast = do
                                     , showCodeAt source l c
                                     ]
                         mapM_ analyzeExpr dims
-                        return (toMilType tt, name, ConstI32 off, ConstI32 level)
+                        return (tt, toMilType tt, name, ConstI32 off, ConstI32 level)
                     MSymbolEntry _ declPos@(AlexPn _ l' c') _ -> semanticError pos $
                         concat  [ show name, " is not a variable:\n"
                                 , showCodeAt source l c, "\n"
