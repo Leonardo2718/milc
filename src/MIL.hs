@@ -66,12 +66,17 @@ data MilValue   = BinaryOp MilType BinaryOp MilValue MilValue   -- result of bin
                 deriving (Eq, Show)
 
 -- MIL opcodes
-data OpCode = Read MilType Symbol
+data OpCode = Read
+                { destType :: MilType
+                , destName :: Symbol
+                , destOffset :: MilValue
+                , destStaticLink :: MilValue
+                }
             | Print MilType MilValue
             | Store Symbol MilValue
             | StoreOffset
-                { destName :: Symbol
-                , destType :: MilType
+                { destType :: MilType
+                , destName :: Symbol
                 , destOffset :: MilValue
                 , destStaticLink :: MilValue
                 }

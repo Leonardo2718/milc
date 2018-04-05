@@ -191,8 +191,8 @@ isDefined sym = do
 
 -- retrieve the symbol table entry for a given symbol, if it exists, looking for
 -- it recursively
-lookupSymbol :: String -> MSemanticAnalyzer (Maybe MSymbolEntry)
-lookupSymbol sym = do
+lookupMaybe :: String -> MSemanticAnalyzer (Maybe MSymbolEntry)
+lookupMaybe sym = do
     table <- getSymbolTable
     return . tableLookup sym $ table
     where
@@ -202,8 +202,8 @@ lookupSymbol sym = do
             Just e -> Just e
             Nothing -> tableLookup sym ss
 
-lookupWithLevel :: String -> MSemanticAnalyzer (Maybe (MSymbolEntry, Int))
-lookupWithLevel sym = do
+lookupWithLevelMaybe :: String -> MSemanticAnalyzer (Maybe (MSymbolEntry, Int))
+lookupWithLevelMaybe sym = do
     table <- getSymbolTable
     return . tableLookup 0 sym $ table
     where
@@ -212,6 +212,33 @@ lookupWithLevel sym = do
         tableLookup i sym (s:ss) = case HashMap.lookup sym s of
             Just e -> Just (e, i)
             Nothing -> tableLookup (i+1) sym ss
+
+-- retrieve the symbol table entry for a given symbol, looking recursively and
+-- throwing an error if it's not found
+lookupSymbol :: String -> String -> AlexPosn -> MSemanticAnalyzer MSymbolEntry
+lookupSymbol what sym pos@(AlexPn _ l c) = do
+    maybeEntry <- lookupMaybe sym
+    source <- fromEnv compSource
+    case maybeEntry of
+        Just entry -> return entry
+        Nothing -> semanticError pos $ concat
+            [ "No ", what, " named ", show sym, " in current scope\n"
+            , showCodeAt source l c
+            ]
+
+-- retrieve the symbol table entry for a given symbol, looking recursively and
+-- throwing an error if it's not found
+lookupWithLevel :: String -> String -> AlexPosn -> MSemanticAnalyzer (MSymbolEntry, Int)
+lookupWithLevel what sym pos@(AlexPn _ l c) = do
+    maybeEntry <- lookupWithLevelMaybe sym
+    source <- fromEnv compSource
+    case maybeEntry of
+        Just entry -> return entry
+        Nothing -> semanticError pos $ concat
+            [ "No ", what, " named ", show sym, " in current scope\n"
+            , showCodeAt source l c
+            ]
+
 
 -- define a new symbol in the current scope of the symbol table
 defineSymbol :: String -> AlexPosn -> MSymbolInfo -> MSemanticAnalyzer ()
@@ -318,14 +345,16 @@ analyzeAST ast = do
                 Assign loc expr -> do
                     logMsgLn "-- analyzing Assign statement"
                     logTreeLines 4 stmt
-                    analyzeLoc loc
+                    op <- analyzeLoc loc
                     analyzeExpr expr
-                    return []
+                    bb <- newBasicBlock [op] Fallthrough
+                    return [bb]
                 MRead loc -> do
                     logMsgLn "-- analyzing Read statement"
                     logTreeLines 4 stmt
-                    analyzeLoc loc
-                    return []
+                    op <- analyzeLoc loc
+                    bb <- newBasicBlock [op] Fallthrough
+                    return [bb]
                 MPrint expr -> do
                     logMsgLn "-- analyzing Print statement"
                     logTreeLines 4 stmt
@@ -349,17 +378,39 @@ analyzeAST ast = do
                     bb <- newBasicBlock [] (Return (Just (toMilType t, v)))
                     return [bb]
                 _ -> unimplementedFeatureError (positionOf stmt)
-            analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer ()
-            analyzeLoc (WithPos (MLocation name offsets) pos@(AlexPn _ l c)) = do
+            analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer OpCode
+            analyzeLoc (WithPos (MLocation name dims) pos@(AlexPn _ l c)) = do
                 source <- fromEnv compSource
-                assertDefined name pos $ concat ["No variable named ", show name, "\n", showCodeAt source l c]
-                mapM_ analyzeExpr offsets
-                return ()
+                -- assertDefined name pos $ concat ["No variable named ", show name, "\n", showCodeAt source l c]
+                (entry, level) <- lookupWithLevel "symbol" name pos
+                op <- case entry of
+                    MSymbolEntry _ _ (MVarSym tt off ds) -> do
+                        assertThat (length dims == ds) pos $
+                            concat  [ "Variable ", show name, " has ", show ds, " dimensions, not ", show (length dims)
+                                    , showCodeAt source l c
+                                    ]
+                        mapM_ analyzeExpr dims
+                        return (StoreOffset (toMilType tt) name (ConstI32 off) (ConstI32 level))
+                    MSymbolEntry _ _ (MParamSym tt off ds) -> do
+                        assertThat (length dims == ds) pos $
+                            concat  [ "Function parameter ", show name, " has ", show ds, " dimensions, not ", show (length dims)
+                                    , showCodeAt source l c
+                                    ]
+                        mapM_ analyzeExpr dims
+                        return (StoreOffset (toMilType tt) name (ConstI32 off) (ConstI32 level))
+                    MSymbolEntry _ declPos@(AlexPn _ l' c') _ -> semanticError pos $
+                        concat  [ show name, " is not a variable:\n"
+                                , showCodeAt source l c, "\n"
+                                , "declared at ", showAlexPos declPos, ":\n"
+                                , showCodeAt source l' c'
+                                ]
+                mapM_ analyzeExpr dims
+                return op
             -- analyzeCases :: WithPos MExpression -> [WithPos MCase] -> MSemanticAnalyzer [[BasicBlock]]
             -- analyzeCases _ [] = return []
             -- analyzeCases expr (WithPos (MCase (MDtor name dtorargs) stmts) pos@(AlexPn _ l c):cases) = do
             --     exprT <- analyzeExpr expr
-            --     entry <- lookupSymbol name
+            --     entry <- lookupMaybe name
             --     source <- fromEnv compSource
             --     case entry of
             --         Just (MSymbolEntry _ _ (MCtorSym _ dtorT)) -> do
@@ -452,7 +503,7 @@ analyzeAST ast = do
                     pos@(AlexPn _ l c) = positionOf n
                 assertDefined name pos $
                     concat ["Function ", show name , " is not in the symbol table!!!"]
-                Just (MSymbolEntry _ _ (MFunSym _ _ label)) <- lookupSymbol name
+                Just (MSymbolEntry _ _ (MFunSym _ _ label)) <- lookupMaybe name
                 pushNewScope
                 logMsgLn "Collecting function parameters"
                 collectParams params
@@ -556,7 +607,7 @@ analyzeAST ast = do
                     MFloor -> assertTypeIn [Real] >> return (Int, UnaryOp MilI32 FloorOp subVal)
                     MCeil -> assertTypeIn [Real] >> return (Int, UnaryOp MilI32 CeilingOp subVal)
             -- MSize (MIdName name) dims -> do
-            --     entry <- lookupSymbol name
+            --     entry <- lookupMaybe name
             --     source <- fromEnv compSource
             --     case entry of
             --         Just (MSymbolEntry _ _ (MVarSym _ ds)) -> do
@@ -576,7 +627,7 @@ analyzeAST ast = do
             MCall (MIdName name) args -> do
                 logMsgLn "-- analyzing call operation"
                 logTreeLines 4 expr
-                entry <- lookupSymbol name
+                entry <- lookupMaybe name
                 source <- fromEnv compSource
                 case entry of
                     Just (MSymbolEntry _ declPos@(AlexPn _ decll declc) (MFunSym paramt rt label)) -> do
@@ -614,31 +665,29 @@ analyzeAST ast = do
             MVar (MIdName name) dims -> do
                 logMsgLn "-- analyzing variable use"
                 logTreeLines 4 expr
-                tentry <- lookupWithLevel name
+                (entry, level) <- lookupWithLevel "symbol" name pos
                 source <- fromEnv compSource
-                case tentry of
-                    Just (entry, level) -> case entry of
-                        MSymbolEntry _ _ (MVarSym tt off ds) -> do
-                            assertThat (length dims == ds) pos $
-                                concat  [ "Variable ", show name, " has ", show ds, " dimensions, not ", show (length dims)
-                                        , showCodeAt source opl opc
-                                        ]
-                            mapM_ analyzeExpr dims
-                            return (tt, LoadOffset (toMilType tt) name (ConstI32 off) (ConstI32 level))
-                        MSymbolEntry _ _ (MParamSym tt off ds) -> do
-                            assertThat (length dims == ds) pos $
-                                concat  [ "Function parameter ", show name, " has ", show ds, " dimensions, not ", show (length dims)
-                                        , showCodeAt source opl opc
-                                        ]
-                            mapM_ analyzeExpr dims
-                            return (tt, LoadOffset (toMilType tt) name (ConstI32 off) (ConstI32 level))
-                        MSymbolEntry _ declPos@(AlexPn _ l c) _ -> semanticError pos $
-                            concat  [ show name, " is not a variable:\n"
-                                    , showCodeAt source opl opc, "\n"
-                                    , "declared at ", showAlexPos declPos, ":\n"
-                                    , showCodeAt source l c
+                case entry of
+                    MSymbolEntry _ _ (MVarSym tt off ds) -> do
+                        assertThat (length dims == ds) pos $
+                            concat  [ "Variable ", show name, " has ", show ds, " dimensions, not ", show (length dims)
+                                    , showCodeAt source opl opc
                                     ]
-                    Nothing -> semanticError pos $ concat ["No variable named ", show name, "\n", showCodeAt source opl opc]
+                        mapM_ analyzeExpr dims
+                        return (tt, LoadOffset (toMilType tt) name (ConstI32 off) (ConstI32 level))
+                    MSymbolEntry _ _ (MParamSym tt off ds) -> do
+                        assertThat (length dims == ds) pos $
+                            concat  [ "Function parameter ", show name, " has ", show ds, " dimensions, not ", show (length dims)
+                                    , showCodeAt source opl opc
+                                    ]
+                        mapM_ analyzeExpr dims
+                        return (tt, LoadOffset (toMilType tt) name (ConstI32 off) (ConstI32 level))
+                    MSymbolEntry _ declPos@(AlexPn _ l c) _ -> semanticError pos $
+                        concat  [ show name, " is not a variable:\n"
+                                , showCodeAt source opl opc, "\n"
+                                , "declared at ", showAlexPos declPos, ":\n"
+                                , showCodeAt source l c
+                                ]
             MConst c -> do
                 logMsgLn "-- found literal constant"
                 logTree expr
