@@ -78,7 +78,7 @@ showMilValue lead val = lead ++ case val of
         [ "UnaryOp ", show tt, " ", show op, "\n"
         , showMilValue (lead ++ "  ") subVal
         ]
-    Call tt label args -> concat ([ "Call ", show tt, " ", show label, "\n"] ++ map (showMilValue (lead ++ "  ")) args)
+    Call tt label args -> concat ([ "Call ", show tt, " ", show label, if null args then "" else "\n"] ++ intersperse "\n" (map (showMilValue (lead ++ "  ")) args))
     _ -> show val
 
 
