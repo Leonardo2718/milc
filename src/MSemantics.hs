@@ -33,7 +33,7 @@ import MilcAST
 import MIL
 
 import Data.HashMap.Strict as HashMap
-import Data.List
+import Data.List as List
 import Control.Monad.State
 import Control.Monad
 
@@ -131,7 +131,7 @@ setSymbolTable t = do
 getTopScope :: MSemanticAnalyzer MSymbolScope
 getTopScope = do
     table <- getSymbolTable
-    when (length table == 0) (logError "Attempting to access scope when none is currently defined")
+    when (List.null table) (logError "Attempting to access scope when none is currently defined")
     return . head $ table
 
 -- pop a scope from the symbol table
@@ -274,13 +274,13 @@ logSymbolTable = do
 
 -- a generic assert mechanism on a boolean value
 assertThat :: Bool -> AlexPosn -> String -> MSemanticAnalyzer ()
-assertThat val pos msg = if val then return () else semanticError pos msg
+assertThat val pos msg = unless val $ semanticError pos msg
 
 -- assert that a symbol is defined and if not, error out with given message
 assertDefined :: String -> AlexPosn -> String -> MSemanticAnalyzer ()
 assertDefined sym pos@(AlexPn _ l c) msg = do
     defined <- isDefined sym
-    when (not defined) throwError
+    unless defined throwError
     where throwError = do
             env <- getEnv
             let source = compSource env
@@ -296,10 +296,7 @@ assertTypeDefined t = case removePos t of
 unimplementedFeatureError :: AlexPosn -> MSemanticAnalyzer a
 unimplementedFeatureError pos@(AlexPn _ l c) = do
     source <- fromEnv compSource
-    semanticError pos $ concat
-        [ "Use of unimplemented language feature:\n"
-        , showCodeAt source l c
-        ]
+    semanticError pos ("Use of unimplemented language feature:\n" ++ showCodeAt source l c)
 
 -- run semantic analysis on an AST instance
 analyzeAST :: AST -> MSemanticAnalyzer ()
@@ -319,10 +316,7 @@ analyzeAST ast = do
             pushMilFunction mainf
             logMsgLn "Generated MIL for main function:"
             logFunction mainf
-            logMsgLn "-- poping scope from symbol table"
-            popScope
-            logMsgLn "-- symbol table is now:"
-            logSymbolTable
+            removeScope
 
         -- perform semantic analysis on a scope
         analyzeScope :: MScope -> MSemanticAnalyzer [BasicBlock]
@@ -407,10 +401,7 @@ analyzeAST ast = do
                     logTreeLines 4 stmt
                     pushNewScope
                     bbs <- analyzeScope scope
-                    logMsgLn "-- poping scope from symbol table"
-                    popScope
-                    logMsgLn "-- symbol table is now:"
-                    logSymbolTable
+                    removeScope
                     return bbs
                 MReturn expr -> do
                     logMsgLn "-- analyzing Return statement"
@@ -431,6 +422,7 @@ analyzeAST ast = do
                             concat  [ show k, show name, " has ", show ds, " dimensions, not ", show (length dims)
                                     , showCodeAt source l c
                                     ]
+                        unless (List.null dims) (unimplementedFeatureError pos)
                         mapM_ analyzeExpr dims
                         return (tt, StackLocal name (toMilType tt) (ConstI32 off) (ConstI32 level))
                     MSymbolEntry _ declPos@(AlexPn _ l' c') _ -> semanticError pos $
@@ -571,10 +563,7 @@ analyzeAST ast = do
                 pushMilFunction fbody
                 logMsgLn "Generated MIL for function body:"
                 logFunction fbody
-                logMsgLn "-- poping scope from symbol table"
-                popScope
-                logMsgLn "-- symbol table is now:"
-                logSymbolTable
+                removeScope
                 where
                     -- helper for collecting parameter declarations
                     collectParams :: [WithPos MParamDecl] -> MSemanticAnalyzer ()
@@ -630,21 +619,21 @@ analyzeAST ast = do
                         MGreaterEqual -> GEOp
                         MAnd -> AndOp
                         MOr -> OrOp
-                if (op `elem` [MAdd, MSub, MMul, MDiv])
+                if op `elem` [MAdd, MSub, MMul, MDiv]
                     then do
                         assertThat (ltype == MInt || ltype == MReal) pos $ concat
                             [ "Operation ", show op, " can only be done on values of type MInt and MReal, not ", show ltype, "\n"
                             , showCodeAt source opl opc
                             ]
                         return (ltype, BinaryOp (toMilType ltype) (toMilOp op) lval rval)
-                    else if (op `elem` [MEqual, MLessThan, MLessEqual, MGreaterThan, MGreaterEqual])
+                    else if op `elem` [MEqual, MLessThan, MLessEqual, MGreaterThan, MGreaterEqual]
                         then do
                             assertThat (ltype == MInt || ltype == MReal) pos $ concat
                                 [ "Operation ", show op, " can only be done on values of type MInt and MReal, not ", show ltype, "\n"
                                 , showCodeAt source opl opc
                                 ]
                             return (MBool, BinaryOp Bool (toMilOp op) lval rval)
-                        else if (op `elem` [MAnd, MOr])
+                        else if op `elem` [MAnd, MOr]
                             then do
                                 assertThat (ltype == MBool) pos $ concat
                                     [ "Operation ", show op, " can only be done on values of type Book, not", show ltype, "\n"
@@ -663,7 +652,7 @@ analyzeAST ast = do
                                 , showCodeAt source subl subc
                                 ]
                 case op of
-                    MNeg -> do assertTypeIn [MInt, MReal] >> return (subType, UnaryOp (toMilType subType) NegativeOp subVal)
+                    MNeg -> assertTypeIn [MInt, MReal] >> return (subType, UnaryOp (toMilType subType) NegativeOp subVal)
                     MNot -> assertTypeIn [MBool] >> return (MBool, UnaryOp Bool BooleanNotOp subVal)
                     MFloat -> assertTypeIn [MInt] >> return (MReal, UnaryOp F32 FloatOp subVal)
                     MFloor -> assertTypeIn [MReal] >> return (MInt, UnaryOp I32 FloorOp subVal)
@@ -700,7 +689,7 @@ analyzeAST ast = do
                             ]
                         args' <- mapM analyzeExpr args
                         assertArgsMatch 0 args' paramt
-                        return (rt, Call (toMilType rt) (FunctionLabel label) (Data.List.map snd args'))
+                        return (rt, Call (toMilType rt) (FunctionLabel label) (List.map snd args'))
                         where
                             assertArgsMatch :: Int -> [(MType, MilValue)] -> [(MType, Int)] -> MSemanticAnalyzer ()
                             assertArgsMatch _ [] [] = return ()
@@ -752,6 +741,14 @@ analyzeAST ast = do
                     CharConst val -> return (MChar, ConstChar val)
                     BoolConst val -> return (MBool, ConstBool val)
             _ -> unimplementedFeatureError pos
+
+        -- helper for removing a scope from the symbol table and logging the change
+        removeScope :: MSemanticAnalyzer ()
+        removeScope = do
+            logMsgLn "-- poping scope from symbol table"
+            popScope
+            logMsgLn "-- symbol table is now:"
+            logSymbolTable
 
         -- helper for translating an MType into a MIL type
         toMilType :: MType -> MilType
