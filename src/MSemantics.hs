@@ -292,6 +292,7 @@ assertTypeDefined t = case removePos t of
     MUserType tname -> assertDefined tname (positionOf t) ("Use of undeclared type " ++ show tname)
     _ -> return ()
 
+-- throw error signalling the use of an unimplemented language feature
 unimplementedFeatureError :: AlexPosn -> MSemanticAnalyzer a
 unimplementedFeatureError pos@(AlexPn _ l c) = do
     source <- fromEnv compSource
@@ -307,6 +308,7 @@ analyzeAST ast = do
     analyzeAST ast
     return ()
     where
+        -- perform semantic analysis on an AST
         analyzeAST :: AST -> MSemanticAnalyzer ()
         analyzeAST (AST _ scope) = do
             logMsgLn "Analyzing AST"
@@ -321,6 +323,8 @@ analyzeAST ast = do
             popScope
             logMsgLn "-- symbol table is now:"
             logSymbolTable
+
+        -- perform semantic analysis on a scope
         analyzeScope :: MScope -> MSemanticAnalyzer [BasicBlock]
         analyzeScope scope@(MScope decls stmts) = do
             logMsgLn "Collecting scope declarations"
@@ -330,6 +334,8 @@ analyzeAST ast = do
             logMsgLn "Generated MIL for current scope:"
             logBBs bbs
             return bbs
+
+        -- perform semantic analysis on a statement
         analyzeStatements :: [WithPos MStatement] -> MSemanticAnalyzer [BasicBlock]
         analyzeStatements [] = return []
         analyzeStatements (stmt:stmts) = analyze >+> analyzeStatements stmts where
@@ -413,6 +419,7 @@ analyzeAST ast = do
                     bb <- newBasicBlock [] (Return (Just (toMilType t, v)))
                     return [bb]
                 _ -> unimplementedFeatureError (positionOf stmt)
+            -- helper for analyzing destination of a read or assignmented
             analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer (MType, Symbol)
             analyzeLoc (WithPos (MLocation name dims) pos@(AlexPn _ l c)) = do
                 source <- fromEnv compSource
@@ -456,6 +463,8 @@ analyzeAST ast = do
             --                     ]
             --         Nothing -> semanticError pos $ concat ["No value constructor named ", show name, "\n", showCodeAt source l c]
             --     analyzeCases expr cases
+
+        -- collect and analyze declarations
         collectDecls :: [WithPos MDeclaration] -> MSemanticAnalyzer ()
         collectDecls decls = do
             logMsgLn "Collecting type declarations"
@@ -466,11 +475,15 @@ analyzeAST ast = do
             collectDeclsWith varsAndFunCollector decls
             logMsgLn "Collecting function implementations"
             collectDeclsWith functionCollector decls
+
+        -- collect declarations using a specific analysis function (the collector)
         collectDeclsWith :: (MDeclaration -> MSemanticAnalyzer ()) -> [WithPos MDeclaration] -> MSemanticAnalyzer ()
         collectDeclsWith collector decls = do
             mapM_ (mapNoPos collector) decls
             logMsgLn "-- symbol table is now:"
             logSymbolTable
+
+        -- collector for data type declarations
         typeCollector :: MDeclaration -> MSemanticAnalyzer ()
         typeCollector decl = case decl of
             Data n _ -> do
@@ -479,6 +492,8 @@ analyzeAST ast = do
                     pos = positionOf n
                 defineSymbol name pos MTypeSym
             _ -> return ()
+
+        -- collector for value constructors
         ctorCollector :: MDeclaration -> MSemanticAnalyzer ()
         ctorCollector decl = case decl of
             Data tname ctors -> do
@@ -495,6 +510,13 @@ analyzeAST ast = do
                             types = Prelude.map removePos (mapNoPos ctorTypes ctor)
                         defineSymbol name pos (MCtorSym types tname)
             _ -> return ()
+
+        -- collector for variable and function declarations
+        --
+        -- This collector assumes that all data type that may appear in the
+        -- current scope have been collected.
+        -- Note that for functions, only their type and name are collected, not their
+        -- definition/implementation.
         varsAndFunCollector :: MDeclaration -> MSemanticAnalyzer ()
         varsAndFunCollector decl = case decl of
             Vars vars t -> do
@@ -522,6 +544,11 @@ analyzeAST ast = do
                 label <- getFunctionLabel name
                 defineSymbol name pos (MFunSym params rtype label)
             _ -> return ()
+
+        -- collector for function definitions/implementations
+        --
+        -- This collector assumes that all data type and variable that may appear
+        -- in the scope of the function definitions have been collected.
         functionCollector :: MDeclaration -> MSemanticAnalyzer ()
         functionCollector decl = case decl of
             Fun n rt params decls stmts -> do
@@ -549,6 +576,7 @@ analyzeAST ast = do
                 logMsgLn "-- symbol table is now:"
                 logSymbolTable
                 where
+                    -- helper for collecting parameter declarations
                     collectParams :: [WithPos MParamDecl] -> MSemanticAnalyzer ()
                     collectParams [] = return ()
                     collectParams (WithPos (MParamDecl pname pdim ptype) ppos:paramDecls) = do
@@ -557,6 +585,7 @@ analyzeAST ast = do
                         i <- countParameters
                         defineSymbol pname ppos (MVarSym (removePos ptype) (i+1) pdim MParameter)
                         collectParams paramDecls
+                    -- helpder for checking the return type of the function and returned values match
                     checkReturnType :: BasicBlock -> MSemanticAnalyzer ()
                     checkReturnType (BasicBlock _ _ (Return (Just (t, _)))) = do
                         let p@(AlexPn _ l c) = positionOf rt
@@ -566,6 +595,11 @@ analyzeAST ast = do
                             , showCodeAt source l c
                             ]
             _ -> return ()
+
+        -- perfrom semantic analysis on an expression
+        --
+        -- This function assumes all symbols that may be used in the current scope
+        -- are defined in the symbol tabel.
         analyzeExpr :: WithPos MExpression -> MSemanticAnalyzer (MType, MilValue)
         analyzeExpr expr = let pos@(AlexPn _ opl opc) = positionOf expr in logMsgLn "-- Analyzing sub-expression" >> case removePos expr of
             MBinaryOp op lhs rhs -> do
@@ -718,6 +752,8 @@ analyzeAST ast = do
                     CharConst val -> return (MChar, ConstChar val)
                     BoolConst val -> return (MBool, ConstBool val)
             _ -> unimplementedFeatureError pos
+
+        -- helper for translating an MType into a MIL type
         toMilType :: MType -> MilType
         toMilType t = case t of
             MInt -> I32
