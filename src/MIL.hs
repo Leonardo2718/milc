@@ -34,17 +34,19 @@ import MilcUtils
 import Data.List
 
 
+-- MIL data types
+data MilType = MilI32 | MilF32 | MilChar | MilBool deriving (Eq, Show)
+
 -- MIL symbol data type
-type Symbol = String
+data Symbol = StackLocal {symbolName :: String, symbolType:: MilType, frameOffset :: MilValue, staticLink :: MilValue}
+            | FunctionLabel {symbolName :: String}
+            deriving (Eq, Show)
 
 -- MIL binary operations
 data BinaryOp = AddOp | SubOp | MulOp | DivOp | EQOp | LTOp | LEOp | GTOp | GEOp | AndOp | OrOp deriving (Eq, Show)
 
 -- MIL unary operations
 data UnaryOp = NegativeOp | BooleanNotOp | FloatOp | FloorOp | CeilingOp deriving (Eq, Show)
-
--- MIL data types
-data MilType = MilI32 | MilF32 | MilChar | MilBool deriving (Eq, Show)
 
 -- MIL value representation
 data MilValue   = BinaryOp MilType BinaryOp MilValue MilValue   -- result of binary operation
@@ -53,7 +55,7 @@ data MilValue   = BinaryOp MilType BinaryOp MilValue MilValue   -- result of bin
                 | ConstF32 Float                                -- constant 32-bit floating point value (IEEE-754)
                 | ConstChar Char                                -- constant character value
                 | ConstBool Bool                                -- constant boolean value
-                | Load MilType Symbol                           -- result of loading a variable
+                | Load Symbol                                   -- result of loading a variable
                 | LoadOffset                                    -- result of loading a value at an offset
                     { valueType :: MilType
                     , valueName :: Symbol
@@ -66,12 +68,7 @@ data MilValue   = BinaryOp MilType BinaryOp MilValue MilValue   -- result of bin
                 deriving (Eq, Show)
 
 -- MIL opcodes
-data OpCode = Read
-                { destType :: MilType
-                , destName :: Symbol
-                , destOffset :: MilValue
-                , destStaticLink :: MilValue
-                }
+data OpCode = Read Symbol
             | Print MilType MilValue
             | Store Symbol MilValue
             | StoreOffset

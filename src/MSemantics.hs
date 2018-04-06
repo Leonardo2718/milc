@@ -369,8 +369,8 @@ analyzeAST ast = do
                 Assign loc expr -> do
                     logMsgLn "-- analyzing Assign statement"
                     logTreeLines 4 stmt
-                    (vart, tt, name, offset, link) <- analyzeLoc loc
-                    symEntry <- lookupSymbol "symbol" name (positionOf loc)
+                    (vart, msym) <- analyzeLoc loc
+                    symEntry <- lookupSymbol "symbol" (symbolName msym) (positionOf loc)
                     (exprt, val) <- analyzeExpr expr
                     source <- fromEnv compSource
                     assertThat (vart == exprt) (positionOf loc) $ concat
@@ -382,13 +382,13 @@ analyzeAST ast = do
                         , "Variable declared at ", showAlexPos (declPos symEntry), "\n"
                         , let AlexPn _ l c = declPos symEntry in showCodeAt source l c, "\n"
                         ]
-                    bb <- newBasicBlock [StoreOffset tt name offset link val] Fallthrough
+                    bb <- newBasicBlock [Store msym val] Fallthrough
                     return [bb]
                 MRead loc -> do
                     logMsgLn "-- analyzing Read statement"
                     logTreeLines 4 stmt
-                    (_, tt, name, offset, link) <- analyzeLoc loc
-                    bb <- newBasicBlock [Read tt name offset link] Fallthrough
+                    (_, msym) <- analyzeLoc loc
+                    bb <- newBasicBlock [Read msym] Fallthrough
                     return [bb]
                 MPrint expr -> do
                     logMsgLn "-- analyzing Print statement"
@@ -413,19 +413,19 @@ analyzeAST ast = do
                     bb <- newBasicBlock [] (Return (Just (toMilType t, v)))
                     return [bb]
                 _ -> unimplementedFeatureError (positionOf stmt)
-            analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer (MType, MilType, Symbol, MilValue, MilValue)
+            analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer (MType, Symbol)
             analyzeLoc (WithPos (MLocation name dims) pos@(AlexPn _ l c)) = do
                 source <- fromEnv compSource
                 -- assertDefined name pos $ concat ["No variable named ", show name, "\n", showCodeAt source l c]
                 (entry, level) <- lookupWithLevel "symbol" name pos
-                op <- case entry of
+                milSym <- case entry of
                     MSymbolEntry _ _ (MVarSym tt off ds k) -> do
                         assertThat (length dims == ds) pos $
                             concat  [ show k, show name, " has ", show ds, " dimensions, not ", show (length dims)
                                     , showCodeAt source l c
                                     ]
                         mapM_ analyzeExpr dims
-                        return (tt, toMilType tt, name, ConstI32 off, ConstI32 level)
+                        return (tt, StackLocal name (toMilType tt) (ConstI32 off) (ConstI32 level))
                     MSymbolEntry _ declPos@(AlexPn _ l' c') _ -> semanticError pos $
                         concat  [ show name, " is not a variable:\n"
                                 , showCodeAt source l c, "\n"
@@ -433,7 +433,7 @@ analyzeAST ast = do
                                 , showCodeAt source l' c'
                                 ]
                 mapM_ analyzeExpr dims
-                return op
+                return milSym
             -- analyzeCases :: WithPos MExpression -> [WithPos MCase] -> MSemanticAnalyzer [[BasicBlock]]
             -- analyzeCases _ [] = return []
             -- analyzeCases expr (WithPos (MCase (MDtor name dtorargs) stmts) pos@(AlexPn _ l c):cases) = do
@@ -666,7 +666,7 @@ analyzeAST ast = do
                             ]
                         args' <- mapM analyzeExpr args
                         assertArgsMatch 0 args' paramt
-                        return (rt, Call (toMilType rt) label (Data.List.map snd args'))
+                        return (rt, Call (toMilType rt) (FunctionLabel label) (Data.List.map snd args'))
                         where
                             assertArgsMatch :: Int -> [(MType, MilValue)] -> [(MType, Int)] -> MSemanticAnalyzer ()
                             assertArgsMatch _ [] [] = return ()
@@ -702,7 +702,7 @@ analyzeAST ast = do
                                     , showCodeAt source opl opc
                                     ]
                         mapM_ analyzeExpr dims
-                        return (tt, LoadOffset (toMilType tt) name (ConstI32 off) (ConstI32 level))
+                        return (tt, Load (StackLocal name (toMilType tt) (ConstI32 off) (ConstI32 level)))
                     MSymbolEntry _ declPos@(AlexPn _ l c) _ -> semanticError pos $
                         concat  [ show name, " is not a variable:\n"
                                 , showCodeAt source opl opc, "\n"
