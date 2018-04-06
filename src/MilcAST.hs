@@ -76,11 +76,11 @@ instance AbstractSyntaxTree MScope where
     nameOf (MScope _ _) = "MScope"
     showSubTrees l (MScope decls stmts) = map (showTree l) decls ++ map (showTree l) stmts
 
-data MType  = Int
-            | Real
-            | Char
-            | Bool
-            | UserType {typeName :: String}
+data MType  = MInt
+            | MReal
+            | MChar
+            | MBool
+            | MUserType {typeName :: String}
             deriving (Eq, Show)
 instance AbstractSyntaxTree MType where
     nameOf = show

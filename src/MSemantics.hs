@@ -289,7 +289,7 @@ assertDefined sym pos@(AlexPn _ l c) msg = do
 -- assert that if a data type is a user type, it is defined in the symbol table
 assertTypeDefined :: WithPos MType -> MSemanticAnalyzer ()
 assertTypeDefined t = case removePos t of
-    UserType tname -> assertDefined tname (positionOf t) ("Use of undeclared type " ++ show tname)
+    MUserType tname -> assertDefined tname (positionOf t) ("Use of undeclared type " ++ show tname)
     _ -> return ()
 
 unimplementedFeatureError :: AlexPosn -> MSemanticAnalyzer a
@@ -341,8 +341,8 @@ analyzeAST ast = do
                     logTreeLines 4 stmt
                     (tt, condition) <- analyzeExpr expr
                     source <- fromEnv compSource
-                    assertThat (tt == Bool) (positionOf expr) $ concat
-                        [ "Condition for IfThenElse block must be of type Bool, not ", show tt, "\n"
+                    assertThat (tt == MBool) (positionOf expr) $ concat
+                        [ "Condition for IfThenElse block must be of type MBool, not ", show tt, "\n"
                         , let AlexPn _ l c = positionOf expr in showCodeAt source l c
                         ]
                     thenBody <- analyzeStatements [thenStmt]
@@ -357,8 +357,8 @@ analyzeAST ast = do
                     logTreeLines 4 stmt
                     (tt, condition) <- analyzeExpr expr
                     source <- fromEnv compSource
-                    assertThat (tt == Bool) (positionOf expr) $ concat
-                        [ "Condition for WhileDo block must be of type Bool, not ", show tt, "\n"
+                    assertThat (tt == MBool) (positionOf expr) $ concat
+                        [ "Condition for WhileDo block must be of type MBool, not ", show tt, "\n"
                         , let AlexPn _ l c = positionOf expr in showCodeAt source l c
                         ]
                     mergePoint <- newBasicBlock [] Fallthrough
@@ -598,25 +598,25 @@ analyzeAST ast = do
                         MOr -> OrOp
                 if (op `elem` [MAdd, MSub, MMul, MDiv])
                     then do
-                        assertThat (ltype == Int || ltype == Real) pos $ concat
-                            [ "Operation ", show op, " can only be done on values of type Int and Real, not ", show ltype, "\n"
+                        assertThat (ltype == MInt || ltype == MReal) pos $ concat
+                            [ "Operation ", show op, " can only be done on values of type MInt and MReal, not ", show ltype, "\n"
                             , showCodeAt source opl opc
                             ]
                         return (ltype, BinaryOp (toMilType ltype) (toMilOp op) lval rval)
                     else if (op `elem` [MEqual, MLessThan, MLessEqual, MGreaterThan, MGreaterEqual])
                         then do
-                            assertThat (ltype == Int || ltype == Real) pos $ concat
-                                [ "Operation ", show op, " can only be done on values of type Int and Real, not ", show ltype, "\n"
+                            assertThat (ltype == MInt || ltype == MReal) pos $ concat
+                                [ "Operation ", show op, " can only be done on values of type MInt and MReal, not ", show ltype, "\n"
                                 , showCodeAt source opl opc
                                 ]
-                            return (Bool, BinaryOp MilBool (toMilOp op) lval rval)
+                            return (MBool, BinaryOp Bool (toMilOp op) lval rval)
                         else if (op `elem` [MAnd, MOr])
                             then do
-                                assertThat (ltype == Bool) pos $ concat
+                                assertThat (ltype == MBool) pos $ concat
                                     [ "Operation ", show op, " can only be done on values of type Book, not", show ltype, "\n"
                                     , showCodeAt source opl opc
                                     ]
-                                return (Bool, BinaryOp MilBool (toMilOp op) lval rval)
+                                return (MBool, BinaryOp Bool (toMilOp op) lval rval)
                             else unimplementedFeatureError pos
             MUnaryOp op sube -> do
                 logMsgLn "-- analyzing unary operation"
@@ -629,11 +629,11 @@ analyzeAST ast = do
                                 , showCodeAt source subl subc
                                 ]
                 case op of
-                    MNeg -> do assertTypeIn [Int, Real] >> return (subType, UnaryOp (toMilType subType) NegativeOp subVal)
-                    MNot -> assertTypeIn [Bool] >> return (Bool, UnaryOp MilBool BooleanNotOp subVal)
-                    MFloat -> assertTypeIn [Int] >> return (Real, UnaryOp MilF32 FloatOp subVal)
-                    MFloor -> assertTypeIn [Real] >> return (Int, UnaryOp MilI32 FloorOp subVal)
-                    MCeil -> assertTypeIn [Real] >> return (Int, UnaryOp MilI32 CeilingOp subVal)
+                    MNeg -> do assertTypeIn [MInt, MReal] >> return (subType, UnaryOp (toMilType subType) NegativeOp subVal)
+                    MNot -> assertTypeIn [MBool] >> return (MBool, UnaryOp Bool BooleanNotOp subVal)
+                    MFloat -> assertTypeIn [MInt] >> return (MReal, UnaryOp F32 FloatOp subVal)
+                    MFloor -> assertTypeIn [MReal] >> return (MInt, UnaryOp I32 FloorOp subVal)
+                    MCeil -> assertTypeIn [MReal] >> return (MInt, UnaryOp I32 CeilingOp subVal)
             -- MSize (MIdName name) dims -> do
             --     entry <- lookupMaybe name
             --     source <- fromEnv compSource
@@ -644,7 +644,7 @@ analyzeAST ast = do
             --                         , showCodeAt source opl opc, "\n"
             --                         , "Did you mean `", name, concat (take ds (repeat "[]")) ,"`"
             --                         ]
-            --             return Int
+            --             return MInt
             --         Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
             --             concat  [show name, " is not a variable:\n"
             --                     , showCodeAt source opl opc, "\n"
@@ -713,17 +713,17 @@ analyzeAST ast = do
                 logMsgLn "-- found literal constant"
                 logTree expr
                 case c of
-                    IntConst val -> return (Int, ConstI32 val)
-                    RealConst val -> return (Real, ConstF32 val)
-                    CharConst val -> return (Char, ConstChar val)
-                    BoolConst val -> return (Bool, ConstBool val)
+                    IntConst val -> return (MInt, ConstI32 val)
+                    RealConst val -> return (MReal, ConstF32 val)
+                    CharConst val -> return (MChar, ConstChar val)
+                    BoolConst val -> return (MBool, ConstBool val)
             _ -> unimplementedFeatureError pos
         toMilType :: MType -> MilType
         toMilType t = case t of
-            Int -> MilI32
-            Real -> MilF32
-            Char -> MilChar
-            Bool -> MilBool
+            MInt -> I32
+            MReal -> F32
+            MChar -> Char
+            MBool -> Bool
 
 -- run semantic analysis in a compiler monad instance
 runSemanticAnalyzer :: Monad m => (AST -> MSemanticAnalyzer a) -> AST -> MSemanticAnalyzerEnvironment -> CompilerMonadT (a, MSemanticAnalyzerState) m

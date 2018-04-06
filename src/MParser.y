@@ -295,11 +295,11 @@ emitType t = WithPos (emitTypeNoP t) (tokenPos t)
 
 emitTypeNoP :: Token -> MType
 emitTypeNoP t = case t of
-    Token INT_T _       -> Int
-    Token REAL_T _      -> Real
-    Token CHAR_T _      -> Char
-    Token BOOL_T _      -> Bool
-    Token (ID_T name) _ -> emitIdWithNoP UserType t
+    Token INT_T _       -> MInt
+    Token REAL_T _      -> MReal
+    Token CHAR_T _      -> MChar
+    Token BOOL_T _      -> MBool
+    Token (ID_T name) _ -> emitIdWithNoP MUserType t
 
 emitConst :: (a -> MConstant) -> (Token -> a) -> Token -> WithPos MExpression
 emitConst asConst getVal t = WithPos (MConst . asConst . getVal $ t) (tokenPos t)

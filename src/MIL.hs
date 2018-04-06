@@ -35,7 +35,7 @@ import Data.List
 
 
 -- MIL data types
-data MilType = MilI32 | MilF32 | MilChar | MilBool deriving (Eq, Show)
+data MilType = I32 | F32 | Char | Bool | Pointer | StackPointer | HeapPointer deriving (Eq, Show)
 
 -- MIL symbol data type
 data Symbol = StackLocal {symbolName :: String, symbolType:: MilType, frameOffset :: MilValue, staticLink :: MilValue}
