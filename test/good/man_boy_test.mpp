@@ -1,0 +1,19 @@
+/*
+ * A variation of Donald Knuth's Man or Boy test
+ */
+
+fun a(k:int, x1:int, x2:int, x3:int, x4:int, x5:int):int {
+    fun b():int {
+        k := k - 1;
+        return a(k, b(), x1, x2, x3, x4);
+    };
+    var result:int;
+    if (k =< 0) then {
+        result := x4 + x5;
+    } else {
+        result := b();
+    };
+    return result;
+};
+
+print a(10, 1, -1, -1, 1, 0);
