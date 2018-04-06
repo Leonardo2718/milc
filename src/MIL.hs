@@ -151,14 +151,15 @@ data Mil = Mil [Function]
 -- MIL data type instantiations
 instance Show BasicBlock where
     show bb = intercalate "\n" . concat $ [ [bbHeader]
-                                 , map (showOpCode padding padding) (blockOpCodes bb)
+                                 , map (showOpCode padding valPadding) (blockOpCodes bb)
                                  , [term]
                                  ] where
         bbHeader = "BasicBlock " ++ show (blockId bb)
-        term = showTerminator padding padding (blockTerm bb)
+        term = showTerminator padding valPadding (blockTerm bb)
         showWithPadding :: Show a => a -> String
         showWithPadding = (\ s -> padding ++ s) . show
         padding = "    "
+        valPadding = padding ++ "`-|"
 
 instance Show Function where
     show (Function label body) = concat [label, "\n", concat (take (length label) (repeat "=")), "\n", showBBs body]
