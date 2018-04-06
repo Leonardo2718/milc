@@ -67,6 +67,21 @@ data MilValue   = BinaryOp MilType BinaryOp MilValue MilValue   -- result of bin
                 | Call MilType Symbol [MilValue]                -- result of calling a function
                 deriving (Eq, Show)
 
+showMilValue :: String -> MilValue -> String
+showMilValue lead val = lead ++ case val of
+    BinaryOp tt op lhs rhs -> concat
+        [ "BinaryOp ", show tt, " ", show op, "\n"
+        , showMilValue (lead ++ "  ") lhs, "\n"
+        , showMilValue (lead ++ "  ") rhs
+        ]
+    UnaryOp tt op subVal -> concat
+        [ "UnaryOp ", show tt, " ", show op, "\n"
+        , showMilValue (lead ++ "  ") subVal
+        ]
+    Call tt label args -> concat ([ "Call ", show tt, " ", show label, "\n"] ++ map (showMilValue (lead ++ "  ")) args)
+    _ -> show val
+
+
 -- MIL opcodes
 data OpCode = Read Symbol
             | Print MilType MilValue
@@ -81,6 +96,18 @@ data OpCode = Read Symbol
             -- | Call (Maybe Symbol) Symbol [MilValue]
             deriving (Eq, Show)
 
+showOpCode :: String -> String -> OpCode -> String
+showOpCode lead valLead opcode = lead ++ case opcode of
+    Print tt val -> concat
+        [ "Print ", show tt, "\n"
+        , showMilValue (lead ++ valLead) val
+        ]
+    Store sym val -> concat
+        [ "Store ", show sym, "\n"
+        , showMilValue (lead ++ valLead) val
+        ]
+    _ -> show opcode
+
 -- MIL basic block ID
 type BlockId = Int
 
@@ -91,6 +118,21 @@ data Terminator = Jump {jumpTarget :: BlockId}
                 | Fallthrough
                 | Return {returnValue :: Maybe (MilType, MilValue)}
                 deriving (Eq, Show)
+
+showTerminator :: String -> String -> Terminator -> String
+showTerminator lead valLead terminator = concat
+    [ lead, termLine, "\n"
+    , lead, termHeader, "\n"
+    , vals
+    ]
+    where
+        termLine = take (length termHeader) (repeat '~')
+        (termHeader, vals) = case terminator of
+            Branch condition bid -> ("Branch " ++ show bid, showMilValue (lead ++ valLead) condition)
+            BranchZero condition bid -> ("BranchZero " ++ show bid, showMilValue (lead ++ valLead) condition)
+            Return (Just (tt, val)) -> ("Return " ++ show tt, showMilValue (lead ++ valLead) val)
+            Return Nothing -> ("Return Nothing", "")
+            _ -> (show terminator, "")
 
 -- MIL basic block representation
 data BasicBlock = BasicBlock    { blockId :: BlockId
@@ -109,13 +151,11 @@ data Mil = Mil [Function]
 -- MIL data type instantiations
 instance Show BasicBlock where
     show bb = intercalate "\n" . concat $ [ [bbHeader]
-                                 , map showWithPadding (blockOpCodes bb)
-                                 , [termLine]
+                                 , map (showOpCode padding padding) (blockOpCodes bb)
                                  , [term]
                                  ] where
         bbHeader = "BasicBlock " ++ show (blockId bb)
-        termLine = padding ++ take (length term - length padding) (repeat '~')
-        term = showWithPadding (blockTerm bb)
+        term = showTerminator padding padding (blockTerm bb)
         showWithPadding :: Show a => a -> String
         showWithPadding = (\ s -> padding ++ s) . show
         padding = "    "
