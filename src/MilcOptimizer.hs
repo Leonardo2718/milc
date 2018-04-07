@@ -48,7 +48,7 @@ data OptimizerEnvironment = OptimizerEnvironment
 optimize :: Monad m => OptimizerEnvironment -> Mil -> CompilerMonadT Mil m
 optimize env mil = do
     logMsgLn $ "=== Running Optimizations (level " ++ show (optLevel env) ++ ") ==="
-    let logOpt opt f@(Function label _) = do
+    let logOpt opt f@(Function label _ _ _) = do
             logMsgLn $ concat ["%%%%% Optimizing ", show label, " %%%%%"]
             logFunction f
             f' <- opt f
@@ -87,13 +87,13 @@ optimize env mil = do
 --
 --
 basicBlockMerging :: Monad m => Function -> CompilerMonadT Function m
-basicBlockMerging mil@(Function label bbs) = do
+basicBlockMerging mil@(Function label rt paramt bbs) = do
     logMsgLn "%%% Performing: Basic Block Merging %%%"
     logMsgLn "-- building CFG"
     cfg <- buildCFG mil
     logCFG cfg
     bbs' <- mergeBlocks cfg bbs
-    return (Function label bbs')
+    return (Function label rt paramt bbs')
     where
         mergeBlocks :: Monad m => CFG -> [BasicBlock] -> CompilerMonadT [BasicBlock] m
         mergeBlocks _ [bb] = return [bb]

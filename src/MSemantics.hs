@@ -312,7 +312,7 @@ analyzeAST ast = do
             logMsgLn "Analyzing global scope"
             pushNewScope
             prog <- analyzeScope scope
-            let mainf = Function "__main__" prog
+            let mainf = Function "__main__" Nothing [] prog
             pushMilFunction mainf
             logMsgLn "Generated MIL for main function:"
             logFunction mainf
@@ -550,7 +550,7 @@ analyzeAST ast = do
                     pos@(AlexPn _ l c) = positionOf n
                 assertDefined name pos $
                     concat ["Function ", show name , " is not in the symbol table!!!"]
-                Just (MSymbolEntry _ _ (MFunSym _ _ label)) <- lookupMaybe name
+                Just (MSymbolEntry _ _ (MFunSym paramt rett label)) <- lookupMaybe name
                 pushNewScope
                 logMsgLn "Collecting function parameters"
                 collectParams params
@@ -559,7 +559,7 @@ analyzeAST ast = do
                 collectDecls decls
                 logMsgLn "Anallyzing function body"
                 bbs <- analyzeStatements stmts
-                let fbody = Function label bbs
+                let fbody = Function label (Just (toMilType rett)) (List.map (toMilType.fst) paramt) bbs
                 pushMilFunction fbody
                 logMsgLn "Generated MIL for function body:"
                 logFunction fbody
@@ -678,10 +678,10 @@ analyzeAST ast = do
             MCall (MIdName name) args -> do
                 logMsgLn "-- analyzing call operation"
                 logTreeLines 4 expr
-                entry <- lookupMaybe name
+                entry <- lookupWithLevelMaybe name
                 source <- fromEnv compSource
                 case entry of
-                    Just (MSymbolEntry _ declPos@(AlexPn _ decll declc) (MFunSym paramt rt label)) -> do
+                    Just (MSymbolEntry _ declPos@(AlexPn _ decll declc) (MFunSym paramt rt label), level) -> do
                         assertThat (length args == length paramt) pos $ concat
                             [ "Function ", show name, " expects ", show (length paramt)
                             , " arguments but ", show (length args), " were given\n"
@@ -689,7 +689,7 @@ analyzeAST ast = do
                             ]
                         args' <- mapM analyzeExpr args
                         assertArgsMatch 0 args' paramt
-                        return (rt, Call (toMilType rt) (FunctionLabel label) (List.map snd args'))
+                        return (rt, Call (FunctionLabel label (Just (toMilType rt)) (List.map (toMilType.fst) paramt) (ConstI32 level)) (List.map snd args'))
                         where
                             assertArgsMatch :: Int -> [(MType, MilValue)] -> [(MType, Int)] -> MSemanticAnalyzer ()
                             assertArgsMatch _ [] [] = return ()
@@ -706,7 +706,7 @@ analyzeAST ast = do
                                     , showCodeAt source decll declc, "\n"
                                     ]
                                 assertArgsMatch (i+1) argTs params
-                    Just (MSymbolEntry _ declPos@(AlexPn _ l c) _) -> semanticError pos $
+                    Just (MSymbolEntry _ declPos@(AlexPn _ l c) _, _) -> semanticError pos $
                         concat  [show name, " is not a function:\n"
                                 , showCodeAt source opl opc, "\n"
                                 , "declared at ", showAlexPos declPos, ":\n"

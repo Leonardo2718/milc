@@ -38,8 +38,8 @@ import Data.List
 data MilType = I32 | F32 | Char | Bool | Pointer | StackPointer | HeapPointer deriving (Eq, Show)
 
 -- MIL symbol data type
-data Symbol = StackLocal {symbolName :: String, symbolType:: MilType, frameOffset :: MilValue, staticLink :: MilValue}
-            | FunctionLabel {symbolName :: String}
+data Symbol = StackLocal {symbolName :: String, symbolType :: MilType, frameOffset :: MilValue, staticLink :: MilValue}
+            | FunctionLabel {symbolName :: String, returnType :: Maybe MilType, parameterTypes :: [MilType], staticLink :: MilValue}
             deriving (Eq, Show)
 
 -- MIL binary operations
@@ -64,7 +64,7 @@ data MilValue   = BinaryOp MilType BinaryOp MilValue MilValue   -- result of bin
                     }
                 -- | StackLoad MilValue                            -- result of loading a value from the stack
                 -- | HeapLoad MilValue                             -- result of loading a value from the heap
-                | Call MilType Symbol [MilValue]                -- result of calling a function
+                | Call Symbol [MilValue]                        -- result of calling a function
                 deriving (Eq, Show)
 
 showMilValue :: String -> MilValue -> String
@@ -78,7 +78,7 @@ showMilValue lead val = lead ++ case val of
         [ "UnaryOp ", show tt, " ", show op, "\n"
         , showMilValue (lead ++ "  ") subVal
         ]
-    Call tt label args -> concat ([ "Call ", show tt, " ", show label, if null args then "" else "\n"] ++ intersperse "\n" (map (showMilValue (lead ++ "  ")) args))
+    Call label args -> concat ([ "Call ", show label, if null args then "" else "\n"] ++ intersperse "\n" (map (showMilValue (lead ++ "  ")) args))
     _ -> show val
 
 
@@ -123,7 +123,7 @@ showTerminator :: String -> String -> Terminator -> String
 showTerminator lead valLead terminator = concat
     [ lead, termLine, "\n"
     , lead, termHeader, "\n"
-    , vals
+    , vals, if null vals then "" else "\n"
     ]
     where
         termLine = take (length termHeader) (repeat '~')
@@ -142,6 +142,8 @@ data BasicBlock = BasicBlock    { blockId :: BlockId
 
 -- MIL function representation
 data Function = Function    { functionLabel :: String
+                            , functionRetType :: Maybe MilType
+                            , functionParamTypes :: [MilType]
                             , functionBody :: [BasicBlock]
                             }
 
@@ -162,7 +164,11 @@ instance Show BasicBlock where
         valPadding = padding ++ "`-|"
 
 instance Show Function where
-    show (Function label body) = concat [label, "\n", concat (take (length label) (repeat "=")), "\n", showBBs body]
+    show (Function label rt paramt body) = concat
+        [ label, " ", show rt, " ", show paramt, "\n"
+        , concat (take (length label) (repeat "=")), "\n"
+        , showBBs body
+        ]
 
 instance Show Mil where
     show (Mil funs) = intercalate "\n" (map show funs)

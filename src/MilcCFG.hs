@@ -132,8 +132,8 @@ addEdges [] cfg = cfg
 
 -- build CFG from MIL code
 buildCFG :: Monad m => Function -> CompilerMonadT CFG m
-buildCFG (Function _ blocks@(BasicBlock bbid _ _:_)) = return $ addEdges blocks (addIncomingEdge bbid Start empty)
-buildCFG (Function _ []) = return empty
+buildCFG (Function _ _ _ blocks@(BasicBlock bbid _ _:_)) = return $ addEdges blocks (addIncomingEdge bbid Start empty)
+buildCFG (Function _ _ _ []) = return empty
 
 -- log a CFG as a block
 logCFG :: Monad m => CFG -> CompilerMonadT () m
