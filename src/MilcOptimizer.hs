@@ -34,9 +34,9 @@ import MIL
 import MilcCFG
 
 import Data.HashMap.Strict as HashMap
+import Data.List as List
 import Control.Monad.State
 import Control.Monad
-import Data.List
 
 
 -- type for storing optimization environment information
@@ -46,31 +46,31 @@ data OptimizerEnvironment = OptimizerEnvironment
 
 -- run various optimizations
 optimize :: Monad m => OptimizerEnvironment -> Mil -> CompilerMonadT Mil m
-optimize env mil = do
+optimize env mil@(Mil functions) = do
     logMsgLn $ "=== Running Optimizations (level " ++ show (optLevel env) ++ ") ==="
-    let logOpt opt f@(Function label _ _ _) = do
+    let
+        optimizeUsing :: Monad m => [Function -> CompilerMonadT Function m] -> Function -> CompilerMonadT Function m
+        optimizeUsing [] f = return f
+        optimizeUsing opts f@(Function label _ _ _) = do
             logMsgLn $ concat ["%%%%% Optimizing ", show label, " %%%%%"]
             logFunction f
-            f' <- opt f
+            f' <- foldl (>>=) (return f) (intersperse (\ f -> logFunction f >> return f) opts)
             logMsgLn $ concat ["%%%%% Optimization for ", show label, " complete %%%%%"]
             logFunction f'
             return f'
-        applyOpt :: Monad m => (Function -> CompilerMonadT Function m) -> Mil -> CompilerMonadT Mil m
-        applyOpt opt (Mil funs) = do
-            funs' <- mapM (logOpt opt) funs
-            return (Mil funs)
         optimizations :: Monad m => [Function -> CompilerMonadT Function m]
         optimizations = case optLevel env of
-            0 -> [
-                 ]
-            1 -> [ basicBlockMerging
-                 ]
-            _ -> [ basicBlockMerging
-                 -- , localValueSimplification
-                 ]
-    mil' <- foldl (>>=) (return mil) (Data.List.map applyOpt optimizations)
+                0 -> [
+                     ]
+                1 -> [ basicBlockMerging
+                     ]
+                _ -> [ basicBlockMerging
+                     , forwardAnd (logMsgLn "%%% Performing No Opt %%%")
+                     -- , localValueSimplification
+                     ]
+    functions' <- mapM (optimizeUsing optimizations) functions
     logMsgLn "=== All optimization complete ==="
-    return mil'
+    return (Mil functions')
 
 -- merge all basic blocks that can be safely merged
 --
@@ -87,13 +87,18 @@ optimize env mil = do
 --
 --
 basicBlockMerging :: Monad m => Function -> CompilerMonadT Function m
-basicBlockMerging mil@(Function label rt paramt bbs) = do
+basicBlockMerging f@(Function label rt paramt bbs) = do
     logMsgLn "%%% Performing: Basic Block Merging %%%"
     logMsgLn "-- building CFG"
-    cfg <- buildCFG mil
+    cfg <- buildCFG f
     logCFG cfg
-    bbs' <- mergeBlocks cfg bbs
-    return (Function label rt paramt bbs')
+    bbs <- mergeBlocks cfg $ functionBody f
+    let f' = f{functionBody=bbs}
+    logMsgLn "-- after merging, CFG is now:"
+    cfg' <- buildCFG f'
+    logCFG cfg'
+    logMsgLn "%%% Basic Block Merging complete %%%"
+    return f'
     where
         mergeBlocks :: Monad m => CFG -> [BasicBlock] -> CompilerMonadT [BasicBlock] m
         mergeBlocks _ [bb] = return [bb]
