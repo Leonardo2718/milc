@@ -148,13 +148,13 @@ localValueSimplification f = do
         simplifyInBlock :: BasicBlock -> LocalValueSimplification BasicBlock
         simplifyInBlock (BasicBlock bbid opcodes t) = do
             logMsgLn ("-- simplifying values in basic block " ++ show bbid)
-            opcodes' <- simplifyInOpCodes opcodes
+            opcodes' <- mapM simplifyInOpCode opcodes
             t' <- simplifyInTerminator t
             return $ BasicBlock bbid opcodes' t'
 
         -- recursively simplify values in each opcode in a list
-        simplifyInOpCodes :: [OpCode] -> LocalValueSimplification [OpCode]
-        simplifyInOpCodes (op:ops) = do
+        simplifyInOpCode :: OpCode -> LocalValueSimplification OpCode
+        simplifyInOpCode op = do
             logMsgLn ("-- simplifying values in opcode: " ++ show op)
             op' <- case op of
                 -- Store sym val@(Const _) -> do
@@ -190,9 +190,7 @@ localValueSimplification f = do
                     return op
                 _ -> return op
             logMsgLn ("-- opcode after value simplification: " ++ show op')
-            ops' <- simplifyInOpCodes ops
-            return $ op':ops'
-        simplifyInOpCodes [] = return []
+            return op'
 
         -- if a terminator is a branch, simplify the branch condition
         simplifyInTerminator :: Terminator -> LocalValueSimplification Terminator
@@ -276,6 +274,14 @@ localValueSimplification f = do
         foldValue val = do
             logMsgLn (concat2WithPadding 12 "-- folding:" (show val))
             val' <- case val of
+                UnaryOp I32 NegativeOp (ConstI32 val) -> return $ ConstI32 (-val)
+                UnaryOp F32 NegativeOp (ConstF32 val) -> return $ ConstF32 (-val)
+
+                UnaryOp Bool BooleanNotOp (ConstBool val) -> return $ ConstBool (not val)
+                UnaryOp F32 FloatOp (ConstI32 val) -> return $ ConstF32 (fromIntegral val)
+                UnaryOp I32 FloorOp (ConstF32 val) -> return $ ConstI32 (floor val)
+                UnaryOp I32 CeilingOp (ConstF32 val) -> return $ ConstI32 (ceiling val)
+
                 BinaryOp I32 AddOp (ConstI32 0) rhs -> return rhs
                 BinaryOp I32 AddOp lhs (ConstI32 0) -> return lhs
                 BinaryOp F32 AddOp (ConstF32 0.0) rhs -> return rhs
@@ -312,16 +318,32 @@ localValueSimplification f = do
                                                     then return (ConstF32 0.0)
                                                     else return val
 
-                BinaryOp I32 op (ConstI32 a) (ConstI32 b) -> return . ConstI32 $ case op of
-                    AddOp -> a + b
-                    SubOp -> a - b
-                    MulOp -> a * b
-                    DivOp -> a `div` b
-                BinaryOp F32 op (ConstF32 a) (ConstF32 b) -> return . ConstF32 $ case op of
-                    AddOp -> a + b
-                    SubOp -> a - b
-                    MulOp -> a * b
-                    DivOp -> a / b
+                BinaryOp I32 op (ConstI32 a) (ConstI32 b) -> return $ case op of
+                    AddOp -> ConstI32 (a + b)
+                    SubOp -> ConstI32 (a - b)
+                    MulOp -> ConstI32 (a * b)
+                    DivOp -> ConstI32 (a `div` b)
+                    EQOp -> ConstBool (a == b)
+                    LTOp -> ConstBool (a < b)
+                    LEOp -> ConstBool (a <= b)
+                    GTOp -> ConstBool (a > b)
+                    GEOp -> ConstBool (a >= b)
+                BinaryOp F32 op (ConstF32 a) (ConstF32 b) -> return $ case op of
+                    AddOp -> ConstF32 (a + b)
+                    SubOp -> ConstF32 (a - b)
+                    MulOp -> ConstF32 (a * b)
+                    DivOp -> ConstF32 (a / b)
+                    EQOp -> ConstBool (a == b)
+                    LTOp -> ConstBool (a < b)
+                    LEOp -> ConstBool (a <= b)
+                    GTOp -> ConstBool (a > b)
+                    GEOp -> ConstBool (a >= b)
+                BinaryOp Bool op (ConstBool a) (ConstBool b) -> return . ConstBool $ case op of
+                    AndOp -> a && b
+                    OrOp -> a || b
+
+                BinaryOp I32 SubOp (ConstI32 0) rhs -> return $ UnaryOp I32 NegativeOp rhs
+                BinaryOp F32 SubOp (ConstF32 0) rhs -> return $ UnaryOp F32 NegativeOp rhs
                 _ -> return val
             logMsgLn (concat2WithPadding 12 "   into:" (show val'))
             return val'
