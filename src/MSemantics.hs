@@ -401,8 +401,16 @@ analyzeAST ast = do
                     logTreeLines 4 stmt
                     pushNewScope
                     bbs <- analyzeScope scope
+                    symbols <- getTopScope
                     removeScope
-                    return bbs
+                    let varTypes = List.map (toMilType . MSemantics.varType . symInfo) $ HashMap.elems vars
+                        vars = HashMap.filter isVar symbols
+                        isVar sym = case symInfo sym of
+                            MVarSym _ _ _ MVariable -> True
+                            _ -> False
+                    allocFrame <- newBasicBlock [AllocateFrame varTypes] Fallthrough
+                    freeFrame <- newBasicBlock [ReleaseFrame varTypes] Fallthrough
+                    return ([allocFrame] ++ bbs ++ [freeFrame])
                 MReturn expr -> do
                     logMsgLn "-- analyzing Return statement"
                     logTreeLines 4 stmt

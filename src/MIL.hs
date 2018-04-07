@@ -94,6 +94,8 @@ data OpCode = Read Symbol
                 , targetVal :: MilValue
                 }
             -- | Call (Maybe Symbol) Symbol [MilValue]
+            | AllocateFrame {localTypes :: [MilType]}
+            | ReleaseFrame {localTypes :: [MilType]}
             deriving (Eq, Show)
 
 showOpCode :: String -> String -> OpCode -> String
