@@ -56,7 +56,7 @@ instance Show MSymbolEntry where
 
 -- show symbol table as a string
 showSymbolTable :: MSymbolTable -> String
-showSymbolTable = intercalate "\n~~~\n" . Prelude.map showScope where
+showSymbolTable = intercalate "\n  ~~~~~\n" . Prelude.map showScope where
     showScope :: MSymbolScope -> String
     showScope = intercalate "\n" . Prelude.map showEntry . HashMap.toList
     showEntry :: (String, MSymbolEntry) -> String

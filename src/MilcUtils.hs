@@ -57,9 +57,9 @@ showFirstLines n = asLines . lines where
 -- helper for putting a log message inside a block
 logBlock :: Monad m => String -> CompilerMonadT () m
 logBlock msg = do
-    logMsgLn "--------------------------------------------------"
+    logMsgLn ",-------------------------------------------------"
     logMsgLn msg
-    logMsgLn "--------------------------------------------------"
+    logMsgLn "`-------------------------------------------------"
 
 -- helper for putting the first n lines of a log message in a block
 logBlockLines :: Monad m => Int -> String -> CompilerMonadT () m
