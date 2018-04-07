@@ -64,10 +64,11 @@ optimize env mil@(Mil functions) = do
                      ]
                 1 -> [ basicBlockMerging
                      ]
-                _ -> [ basicBlockMerging
+                2 -> [ basicBlockMerging
                      , forwardAnd (logMsgLn "%%% Performing No Opt %%%")
                      -- , localValueSimplification
                      ]
+                l -> [ forwardAnd (logError (concat ["No optimization level ", show l, " implemented.\nUse `--help` option for usage info."])) ]
     functions' <- mapM (optimizeUsing optimizations) functions
     logMsgLn "=== All optimization complete ==="
     return (Mil functions')
