@@ -65,8 +65,7 @@ optimize env mil@(Mil functions) = do
                 1 -> [ basicBlockMerging
                      ]
                 2 -> [ basicBlockMerging
-                     , forwardAnd (logMsgLn "%%% Performing No Opt %%%")
-                     -- , localValueSimplification
+                     , localValueSimplification
                      ]
                 l -> [ forwardAnd (logError (concat ["No optimization level ", show l, " implemented.\nUse `--help` option for usage info."])) ]
     functions' <- mapM (optimizeUsing optimizations) functions
@@ -116,13 +115,13 @@ basicBlockMerging f@(Function label rt paramt bbs) = do
                     return $ mergeBasicBlocks bb1 bb2 : bbs'
                 False -> return $ bb1:bb2:bbs'
 
-{-
+
 -- state for local copy propagation
 --
 -- The `copyTable` field is a map of symbol names to MIL values. The table keeps
 -- track of symbols that are simple copies of either a variable or a constant.
 -- This table is used for copy propagation.
-data LocalValueSimplificationState = LocalValueSimplificationState { copyTable :: HashMap Symbol MilValue }
+data LocalValueSimplificationState = LocalValueSimplificationState { copyTable :: HashMap String MilValue }
 type LocalValueSimplificationStateMonad = State LocalValueSimplificationState
 type LocalValueSimplification a = CompilerMonadT a LocalValueSimplificationStateMonad
 
@@ -133,17 +132,17 @@ type LocalValueSimplification a = CompilerMonadT a LocalValueSimplificationState
 --  * constant folding
 --  * basic strength reduction
 localValueSimplification :: Monad m => Function -> CompilerMonadT Function m
-localValueSimplification mil = do
-    let (a, s) = runState (runCompilerT (doValueSimplification mil)) (LocalValueSimplificationState HashMap.empty)
-    mil' <- compiler a
-    return mil'
+localValueSimplification f = do
+    let (a, s) = runState (runCompilerT (doValueSimplification f)) (LocalValueSimplificationState HashMap.empty)
+    f' <- compiler a
+    return f'
     where
         -- just simplify values in the contianed basic blocks
         doValueSimplification :: Function -> LocalValueSimplification Function
-        doValueSimplification mil@(Function _ bbs) = do
+        doValueSimplification f = do
             logMsgLn "%%%% Performing: Local Value Simplification %%%%"
-            bbs' <- mapM (\bb -> simplifyInBlock bb =>> resetCopyTable) bbs
-            return $ Mil bbs'
+            bbs' <- mapM (\bb -> simplifyInBlock bb =>> resetCopyTable) (functionBody f)
+            return f{functionBody=bbs'}
 
         -- just simplify values in the contained opcodes and the terminator
         simplifyInBlock :: BasicBlock -> LocalValueSimplification BasicBlock
@@ -158,32 +157,32 @@ localValueSimplification mil = do
         simplifyInOpCodes (op:ops) = do
             logMsgLn ("-- simplifying values in opcode: " ++ show op)
             op' <- case op of
-                Store sym val@(Const _) -> do
-                    -- if the opcode is a store of the constant
-                    -- record the symbol as a copy of the constant
-                    recordCopy sym val
-                    return op
-                Store sym val@(Load _) -> do
-                    -- if the opcode is a load, record the symbol as a copy of
-                    -- the loaded variable
-                    val' <- propagateCopies val
-                    recordCopy sym val'
-                    return op
+                -- Store sym val@(Const _) -> do
+                --     -- if the opcode is a store of the constant
+                --     -- record the symbol as a copy of the constant
+                --     recordCopy sym val
+                --     return op
+                -- Store sym val@(Load _) -> do
+                --     -- if the opcode is a load, record the symbol as a copy of
+                --     -- the loaded variable
+                --     val' <- propagateCopies val
+                --     recordCopy sym val'
+                --     return op
                 Store sym val -> do
                     -- if the opcode is a store (not handled above), simplify
                     -- the value being stored, and if the result is a constant
                     -- or a load, record the symbol as a copy
                     val' <- simplifyValue val
                     case val' of
-                        Const _ -> recordCopy sym val'
-                        Load  _ -> recordCopy sym val'
+                        -- Const _ -> recordCopy sym val'
+                        -- Load  _ -> recordCopy sym val'
                         _ -> killCopy sym
                     return $ Store sym val'
-                Print val -> do
+                Print tt val -> do
                     -- if the opcode is a print, simplify the value being
                     -- printed
                     val' <- simplifyValue val
-                    return $ Print val'
+                    return $ Print tt val'
                 Read sym -> do
                     -- if the opcode is a read, remove (kill) the symbol being
                     -- stored to from the copyTable
@@ -236,25 +235,25 @@ localValueSimplification mil = do
         propagateCopies val = do
             logMsgLn ("-- propagating copies in: " ++ show val)
             case val of
-                BinaryOp op lhs rhs -> do
-                    lhs' <- propagateCopies lhs
-                    rhs' <- propagateCopies rhs
-                    return $ BinaryOp op lhs' rhs'
-                Load sym -> do
-                    v <- tableLookup sym
-                    case v of
-                        Just v' -> return v'
-                        Nothing -> return val
+                -- BinaryOp op lhs rhs -> do
+                --     lhs' <- propagateCopies lhs
+                --     rhs' <- propagateCopies rhs
+                --     return $ BinaryOp op lhs' rhs'
+                -- Load sym -> do
+                --     v <- tableLookup sym
+                --     case v of
+                --         Just v' -> return v'
+                --         Nothing -> return val
                 _ -> return val
 
         -- recursively fold a values sub-expressions and then the resulting
         -- expression itself
         foldValueRecursively :: MilValue -> LocalValueSimplification MilValue
-        foldValueRecursively val@(BinaryOp op lhs rhs) = do
+        foldValueRecursively val@(BinaryOp tt op lhs rhs) = do
             logMsgLn ("Folding " ++ show val)
             lhs' <- foldValueRecursively lhs
             rhs' <- foldValueRecursively rhs
-            foldValue $ BinaryOp op lhs' rhs'
+            foldValue $ BinaryOp tt op lhs' rhs'
         foldValueRecursively val = return val
 
         -- fold a MilValue
@@ -263,7 +262,7 @@ localValueSimplification mil = do
         -- reduction in strength. Examples of the transformation applied by this
         -- optimization are:
         --
-        --  x + 0 => a
+        --  x + 0 => x
         --  x - 0 => x
         --  x * 1 => x
         --  x / 1 => x
@@ -277,26 +276,52 @@ localValueSimplification mil = do
         foldValue val = do
             logMsgLn (concat2WithPadding 12 "-- folding:" (show val))
             val' <- case val of
-                BinaryOp AddOp (Const 0) rhs -> return rhs
-                BinaryOp AddOp lhs (Const 0) -> return lhs
-                BinaryOp SubOp lhs (Const 0) -> return lhs
-                BinaryOp MulOp (Const 1) rhs -> return rhs
-                BinaryOp MulOp lhs (Const 1) -> return lhs
-                BinaryOp DivOp lhs (Const 1) -> return lhs
-                BinaryOp DivOp _ (Const 0) -> return val -- don't fold division by 0
-                BinaryOp MulOp (Const 0) _ -> return $ Const 0
-                BinaryOp MulOp _ (Const 0) -> return $ Const 0
-                BinaryOp DivOp (Const 0) _ -> return $ Const 0
-                BinaryOp AddOp (Load a) (Load b) -> if a == b
-                                                    then return (BinaryOp MulOp (Const 2) (Load a))
+                BinaryOp I32 AddOp (ConstI32 0) rhs -> return rhs
+                BinaryOp I32 AddOp lhs (ConstI32 0) -> return lhs
+                BinaryOp F32 AddOp (ConstF32 0.0) rhs -> return rhs
+                BinaryOp F32 AddOp lhs (ConstF32 0.0) -> return lhs
+                BinaryOp I32 SubOp lhs (ConstI32 0) -> return lhs
+                BinaryOp F32 SubOp lhs (ConstF32 0.0) -> return lhs
+
+                BinaryOp I32 MulOp (ConstI32 1) rhs -> return rhs
+                BinaryOp I32 MulOp lhs (ConstI32 1) -> return lhs
+                BinaryOp F32 MulOp (ConstF32 1.0) rhs -> return rhs
+                BinaryOp F32 MulOp lhs (ConstF32 1.0) -> return lhs
+                BinaryOp I32 DivOp lhs (ConstI32 1) -> return lhs
+                BinaryOp I32 DivOp _ (ConstI32 0) -> return val -- don't fold division by 0
+                BinaryOp F32 DivOp lhs (ConstF32 1.0) -> return lhs
+                BinaryOp F32 DivOp _ (ConstF32 0.0) -> return val -- don't fold division by 0
+
+                BinaryOp I32 MulOp (ConstI32 0) _ -> return $ ConstI32 0
+                BinaryOp I32 MulOp _ (ConstI32 0) -> return $ ConstI32 0
+                BinaryOp I32 DivOp (ConstI32 0) _ -> return $ ConstI32 0
+                BinaryOp F32 MulOp (ConstF32 0) _ -> return $ ConstF32 0
+                BinaryOp F32 MulOp _ (ConstF32 0) -> return $ ConstF32 0
+                BinaryOp F32 DivOp (ConstF32 0) _ -> return $ ConstF32 0
+
+                BinaryOp I32 AddOp (Load a) (Load b) -> if a == b
+                                                    then return (BinaryOp I32 MulOp (ConstI32 2) (Load a))
                                                     else return val
-                BinaryOp SubOp (Load a) (Load b) -> if a == b
-                                                    then return (Const 0)
+                BinaryOp F32 AddOp (Load a) (Load b) -> if a == b
+                                                    then return (BinaryOp F32 MulOp (ConstF32 2.0) (Load a))
                                                     else return val
-                BinaryOp AddOp (Const a) (Const b) -> return $ Const (a + b)
-                BinaryOp SubOp (Const a) (Const b) -> return $ Const (a - b)
-                BinaryOp MulOp (Const a) (Const b) -> return $ Const (a * b)
-                BinaryOp DivOp (Const a) (Const b) -> return $ Const (a `div` b)
+                BinaryOp I32 SubOp (Load a) (Load b) -> if a == b
+                                                    then return (ConstI32 0)
+                                                    else return val
+                BinaryOp F32 SubOp (Load a) (Load b) -> if a == b
+                                                    then return (ConstF32 0.0)
+                                                    else return val
+
+                BinaryOp I32 op (ConstI32 a) (ConstI32 b) -> return . ConstI32 $ case op of
+                    AddOp -> a + b
+                    SubOp -> a - b
+                    MulOp -> a * b
+                    DivOp -> a `div` b
+                BinaryOp F32 op (ConstF32 a) (ConstF32 b) -> return . ConstF32 $ case op of
+                    AddOp -> a + b
+                    SubOp -> a - b
+                    MulOp -> a * b
+                    DivOp -> a / b
                 _ -> return val
             logMsgLn (concat2WithPadding 12 "   into:" (show val'))
             return val'
@@ -304,19 +329,19 @@ localValueSimplification mil = do
         -- record a symbol as a copy of a value
         recordCopy :: Symbol -> MilValue -> LocalValueSimplification ()
         recordCopy sym val = do
-            logMsgLn $ concat ["-- adding ", sym, " as a copy of ", show val]
+            logMsgLn $ concat ["-- adding ", show (symbolName sym), " as a copy of ", show val]
             s <- get
             let t = copyTable s
-                t' = HashMap.insert sym val t
+                t' = HashMap.insert (symbolName sym) val t
             put s{copyTable=t'}
 
         -- remove a symbol from the copyTable
         killCopy :: Symbol -> LocalValueSimplification ()
         killCopy sym = do
-            logMsgLn ("-- killing symbol " ++ sym ++ " as a copy")
+            logMsgLn ("-- killing symbol " ++ show (symbolName sym) ++ " as a copy")
             s <- get
             let t = copyTable s
-                t' = HashMap.delete sym t
+                t' = HashMap.delete (symbolName sym) t
             put s{copyTable=t'}
 
         -- remove all recorded copies from the table
@@ -331,6 +356,5 @@ localValueSimplification mil = do
         tableLookup sym = do
             s <- get
             let t = copyTable s
-                v = HashMap.lookup sym t
+                v = HashMap.lookup (symbolName sym) t
             return v
--}
