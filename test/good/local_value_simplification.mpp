@@ -1,0 +1,25 @@
+var a,b,c,d,e,f:int;
+var bar:real;
+
+a := 1;
+b := a + 1;
+c := b - a;
+d := c * 1;
+
+if a + b + c + d = 0 then print 0 else print 1;
+
+read a;
+b := a / 1;
+c := b * 1;
+d := 0 + c;
+e := c - 0;
+f := e - a;
+
+bar := 1.0 + 0.0;
+print 0.0 + bar;
+print 1.0 - 0.0;
+bar := bar + bar;
+print bar - bar;
+bar := 4.0 + 5.0;
+bar := 0.0 - bar;
+

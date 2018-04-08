@@ -293,10 +293,13 @@ assertTypeDefined t = case removePos t of
     _ -> return ()
 
 -- throw error signalling the use of an unimplemented language feature
-unimplementedFeatureError :: AlexPosn -> MSemanticAnalyzer a
-unimplementedFeatureError pos@(AlexPn _ l c) = do
+unimplementedFeatureError :: AlexPosn -> String -> MSemanticAnalyzer a
+unimplementedFeatureError pos@(AlexPn _ l c) feature = do
     source <- fromEnv compSource
-    semanticError pos ("Use of unimplemented language feature:\n" ++ showCodeAt source l c)
+    semanticError pos $ concat
+        [ "Use of unimplemented language feature: ", feature, "\n"
+        , showCodeAt source l c
+        ]
 
 -- run semantic analysis on an AST instance
 analyzeAST :: AST -> MSemanticAnalyzer ()
@@ -417,7 +420,7 @@ analyzeAST ast = do
                     (t, v) <- analyzeExpr expr
                     bb <- newBasicBlock [] (Return (Just (toMilType t, v)))
                     return [bb]
-                _ -> unimplementedFeatureError (positionOf stmt)
+                _ -> unimplementedFeatureError (positionOf stmt) ("Unsuported statement")
             -- helper for analyzing destination of a read or assignmented
             analyzeLoc :: WithPos MLocation -> MSemanticAnalyzer (MType, Symbol)
             analyzeLoc (WithPos (MLocation name dims) pos@(AlexPn _ l c)) = do
@@ -430,7 +433,7 @@ analyzeAST ast = do
                             concat  [ show k, show name, " has ", show ds, " dimensions, not ", show (length dims)
                                     , showCodeAt source l c
                                     ]
-                        unless (List.null dims) (unimplementedFeatureError pos)
+                        unless (List.null dims) (unimplementedFeatureError pos "Use of arrays")
                         mapM_ analyzeExpr dims
                         return (tt, StackLocal name (toMilType tt) (ConstI32 off) (ConstI32 level))
                     MSymbolEntry _ declPos@(AlexPn _ l' c') _ -> semanticError pos $
@@ -531,6 +534,7 @@ analyzeAST ast = do
                             dims = mapNoPos (length . varDims) v
                             pos = positionOf v
                         i <- countVariables
+                        unless (dims == 0) (unimplementedFeatureError pos "Array declaration")
                         defineSymbol name pos (MVarSym (removePos t) (i+1) dims MVariable)
             Fun n rt ps _ _ -> do
                 logMsgLn "-- found function declaration"
@@ -644,11 +648,11 @@ analyzeAST ast = do
                         else if op `elem` [MAnd, MOr]
                             then do
                                 assertThat (ltype == MBool) pos $ concat
-                                    [ "Operation ", show op, " can only be done on values of type Book, not", show ltype, "\n"
+                                    [ "Operation ", show op, " can only be done on values of type Bool, not", show ltype, "\n"
                                     , showCodeAt source opl opc
                                     ]
                                 return (MBool, BinaryOp Bool (toMilOp op) lval rval)
-                            else unimplementedFeatureError pos
+                            else unimplementedFeatureError pos ("Unrecognized operation " ++ show op)
             MUnaryOp op sube -> do
                 logMsgLn "-- analyzing unary operation"
                 logTreeLines 3 expr
@@ -748,7 +752,7 @@ analyzeAST ast = do
                     RealConst val -> return (MReal, ConstF32 val)
                     CharConst val -> return (MChar, ConstChar val)
                     BoolConst val -> return (MBool, ConstBool val)
-            _ -> unimplementedFeatureError pos
+            _ -> unimplementedFeatureError pos ("Unsuported expression")
 
         -- helper for removing a scope from the symbol table and logging the change
         removeScope :: MSemanticAnalyzer ()
