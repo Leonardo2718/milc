@@ -114,12 +114,13 @@ helpMessage = msg where
     msg = unlines [usage, "", notes, optDesc, details]
     usage = "Usage: milc [OPTIONS ...] [source_files ...]"
     notes = unlines . addLeading "  " $
-        [ "Will compile all source Minisculus files. If no source files are provided,"
-        , "contents of standard input will be compiled, up to EOF (Ctrl+D). By default,"
-        , "generated files will be put in the same directory as source files (or printed"
-        , "to standard output if compiling from standard input). Use the `--outdir`"
-        , "option to specify a different destination directory for all generated files."
-        , "All compilation errors are printed to standard error."
+        [ "Will compile all M source files. If no source files are provided,"
+        , "contents of standard input will be compiled, up to EOF (Ctrl+D)."
+        , "By default, generated files will be put in the same directory as"
+        , "source files (or printed to standard output if compiling from"
+        , "standard input). Use the `--outdir` option to specify a different"
+        , "destination directory for all generated files. All compilation"
+        , "errors are printed to standard error."
         ]
     optDesc = (usageInfo "OPTIONS:" optionTransforms)
     details = MilcOptimizer.helpMsg

@@ -78,16 +78,18 @@ helpMsg = intercalate "\n\n"
     , optionDesc "-O0"  [ "Performs no optimizations. This may make the generated code"
                         , "more difficult to read."
                         ]
-    , optionDesc "-O1 (default)"    [ "Performs minimal optizations to clean up the generated code."
-                                    , "Currently, this otpimization level only performs basic block"
-                                    , "merging. This can significantly reduces the number of"
+    , optionDesc "-O1 (default)"    [ "Performs minimal optizations to clean up the"
+                                    , "generated code. Currently, this otpimization"
+                                    , "level only performs basic block merging. This"
+                                    , "can significantly reduces the number of"
                                     , "labels generated."
                                     ]
-    , optionDesc "-O2"  [ "Performs a few basic optimizations. In addition to basic block merging,"
-                        , "this optimization level also performs constant folding, arithmetic"
-                        , "simplification, and basic strength reduction. These help to further"
-                        , "clean up the code and can potentially result in performance"
-                        , "improvements by reducing the total number of instructions."
+    , optionDesc "-O2"  [ "Performs a few basic optimizations. In addition to basic"
+                        , "block merging, this optimization level also performs"
+                        , "constant folding, arithmetic simplification, and basic"
+                        , "strength reduction. These help to further clean up the"
+                        , "code and can potentially result in performance improvements"
+                        , "by reducing the total number of instructions."
                         ]
     ]
 
