@@ -89,3 +89,13 @@ a >+> b =  do
     l1 <- a
     l2 <- b
     return (l1 ++ l2)
+
+addLeading :: String -> [String] -> [String]
+addLeading lead strs = map (\ s -> lead ++ s) strs
+
+-- helper for generating detailed option descriptions
+optionDesc :: String -> [String] -> String
+optionDesc optStr ls = intercalate "\n" desc where
+    desc = [ optLead ++ head ls ] ++ addLeading descLead (tail ls)
+    optLead = "  " ++ optStr ++ "  "
+    descLead = take (length optLead) (repeat ' ')

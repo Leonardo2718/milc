@@ -72,6 +72,25 @@ optimize env mil@(Mil functions) = do
     logMsgLn "=== All optimization complete ==="
     return (Mil functions')
 
+-- help message for the optimizer
+helpMsg = intercalate "\n\n"
+    [ "Optimizations"
+    , optionDesc "-O0"  [ "Performs no optimizations. This may make the generated code"
+                        , "more difficult to read."
+                        ]
+    , optionDesc "-O1 (default)"    [ "Performs minimal optizations to clean up the generated code."
+                                    , "Currently, this otpimization level only performs basic block"
+                                    , "merging. This can significantly reduces the number of"
+                                    , "labels generated."
+                                    ]
+    , optionDesc "-O2"  [ "Performs a few basic optimizations. In addition to basic block merging,"
+                        , "this optimization level also performs constant folding, arithmetic"
+                        , "simplification, and basic strength reduction. These help to further"
+                        , "clean up the code and can potentially result in performance"
+                        , "improvements by reducing the total number of instructions."
+                        ]
+    ]
+
 -- merge all basic blocks that can be safely merged
 --
 -- This optimization merges sequences of basic blocks that are safe to merge.

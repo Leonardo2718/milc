@@ -28,6 +28,7 @@ module Main where
 
 -- local imports
 import CompilerEnvironment
+import MilcUtils
 import MLexer
 import MParser
 import MSemantics
@@ -66,7 +67,7 @@ defaultMilcOptions = MilcOptions
     { milcInFiles = []
     , milcStdOut = False
     , milcStdIn = False
-    , milcOptLevel = 0
+    , milcOptLevel = 1
     , milcOutDir = ""
     , milcLogFile = ""
     , milcHelp = False
@@ -86,7 +87,7 @@ optionTransforms =
                 "read source from standard input (implies --stdout)"
     , Option    ['O'] []
                 (ReqArg (\ s opts -> opts {milcOptLevel = read s}) "LEVEL")
-                "set the optimization level (0 means no optimizations)"
+                ("set the optimization level to LEVEL (default is " ++ show (milcOptLevel defaultMilcOptions) ++ ")")
     , Option    ['d'] ["outdir"]
                 (ReqArg (\ s opts -> opts {milcOutDir = s}) "DIRECTORY")
                 "put output files in directory DIRECTORY"
@@ -109,15 +110,19 @@ applyOptionTransforms transforms argv defaults = opts {milcStdOut=newStdOut,milc
 
 -- help message for the application
 helpMessage :: String
-helpMessage = usageInfo "Usage: milc [OPTIONS ...] [source_files ...]\n\n\
-                        \  Will compile all source Minisculus files. If no source files are provided,\n\
-                        \  contents of standard input will be compiled, up to EOF (Ctrl+D). By default,\n\
-                        \  generated files will be put in the same directory as source files (or printed\n\
-                        \  to standard output if compiling from standard input). Use the `--outdir`\n\
-                        \  option to specify a different destination directory for all generated files.\n\
-                        \  By default, milc will perform no optimizations. Use the option `-O1` to\n\
-                        \  enable optimizations. All compilation errors are printed to standard error. \n\n\
-                        \MilcOptions:" optionTransforms
+helpMessage = msg where
+    msg = unlines [usage, "", notes, optDesc, details]
+    usage = "Usage: milc [OPTIONS ...] [source_files ...]"
+    notes = unlines . addLeading "  " $
+        [ "Will compile all source Minisculus files. If no source files are provided,"
+        , "contents of standard input will be compiled, up to EOF (Ctrl+D). By default,"
+        , "generated files will be put in the same directory as source files (or printed"
+        , "to standard output if compiling from standard input). Use the `--outdir`"
+        , "option to specify a different destination directory for all generated files."
+        , "All compilation errors are printed to standard error."
+        ]
+    optDesc = (usageInfo "OPTIONS:" optionTransforms)
+    details = MilcOptimizer.helpMsg
 
 -- main program ----------------------------------------------------------------
 
