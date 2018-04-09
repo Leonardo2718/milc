@@ -1,5 +1,13 @@
 # Revision history for milc
 
+## 0.2.2.1  -- 2018-04-08
+
+* Implement proper M compiler
+    * Use Happy parser generator together with Alex
+    * Update the AST to reflect the M language
+    * Add more expressive features to MIL
+    * Update optimizer to support new MIL
+
 ## 0.2.1.0  -- 2018-02-16
 
 * Implement a simble optimizer
