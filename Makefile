@@ -31,11 +31,12 @@ HS_SOURCES = \
 	CompilerEnvironment.hs \
 	MilcUtils.hs \
 	MilcAST.hs \
+	MIL.hs \
+	MSemantics.hs \
+	MilcCFG.hs \
+	MilcOptimizer.hs \
 	Main.hs
 	# MRDParser.hs \
-	# MIL.hs \
-	# MilcCFG.hs \
-	# MilcOptimizer.hs \
 	# MILGenerator.hs \
 	# MEncoder.hs \
 	# RSMGenerator.hs \
