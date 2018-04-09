@@ -1,0 +1,6 @@
+var x,y,z:bool;
+begin
+    read x;
+    read y
+    read z;
+end

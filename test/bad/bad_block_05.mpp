@@ -1,0 +1,4 @@
+var x:int;
+begin
+    while 1 do { read x };
+end

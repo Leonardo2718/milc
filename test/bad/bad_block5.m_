@@ -1,3 +1,0 @@
-begin
-    while 1 do begin input x end;
-end
