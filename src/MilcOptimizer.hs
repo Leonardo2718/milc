@@ -274,6 +274,10 @@ localValueSimplification f = do
             lhs' <- foldValueRecursively lhs
             rhs' <- foldValueRecursively rhs
             foldValue $ BinaryOp tt op lhs' rhs'
+        foldValueRecursively val@(UnaryOp tt op v) = do
+            logMsgLn ("Folding " ++ show val)
+            v' <- foldValueRecursively v
+            foldValue $ UnaryOp tt op v'
         foldValueRecursively val = return val
 
         -- fold a MilValue
@@ -299,10 +303,11 @@ localValueSimplification f = do
                 UnaryOp I32 NegativeOp (ConstI32 val) -> return $ ConstI32 (-val)
                 UnaryOp F32 NegativeOp (ConstF32 val) -> return $ ConstF32 (-val)
 
-                UnaryOp Bool BooleanNotOp (ConstBool val) -> return $ ConstBool (not val)
                 UnaryOp F32 FloatOp (ConstI32 val) -> return $ ConstF32 (fromIntegral val)
                 UnaryOp I32 FloorOp (ConstF32 val) -> return $ ConstI32 (floor val)
                 UnaryOp I32 CeilingOp (ConstF32 val) -> return $ ConstI32 (ceiling val)
+
+                UnaryOp Bool BooleanNotOp (ConstBool val) -> return $ ConstBool (not val)
 
                 BinaryOp I32 AddOp (ConstI32 0) rhs -> return rhs
                 BinaryOp I32 AddOp lhs (ConstI32 0) -> return lhs
@@ -366,6 +371,24 @@ localValueSimplification f = do
 
                 BinaryOp I32 SubOp (ConstI32 0) rhs -> return $ UnaryOp I32 NegativeOp rhs
                 BinaryOp F32 SubOp (ConstF32 0) rhs -> return $ UnaryOp F32 NegativeOp rhs
+                BinaryOp I32 AddOp lhs (UnaryOp I32 NegativeOp rhs) -> return $ BinaryOp I32 SubOp lhs rhs
+                BinaryOp I32 SubOp lhs (UnaryOp I32 NegativeOp rhs) -> return $ BinaryOp I32 AddOp lhs rhs
+                BinaryOp F32 AddOp lhs (UnaryOp F32 NegativeOp rhs) -> return $ BinaryOp F32 SubOp lhs rhs
+                BinaryOp F32 SubOp lhs (UnaryOp F32 NegativeOp rhs) -> return $ BinaryOp F32 AddOp lhs rhs
+
+                BinaryOp Bool AndOp lhs (ConstBool False) -> return $ ConstBool False
+                BinaryOp Bool AndOp (ConstBool False) rhs -> return $ ConstBool False
+                BinaryOp Bool AndOp lhs (ConstBool True) -> return lhs
+                BinaryOp Bool AndOp (ConstBool True) rhs -> return rhs
+                BinaryOp Bool OrOp lhs (ConstBool False) -> return lhs
+                BinaryOp Bool OrOp (ConstBool False) rhs -> return rhs
+                BinaryOp Bool OrOp lhs (ConstBool True) -> return $ ConstBool True
+                BinaryOp Bool OrOp (ConstBool True) rhs -> return $ ConstBool True
+                BinaryOp Bool AndOp (UnaryOp Bool BooleanNotOp lhs) (UnaryOp Bool BooleanNotOp rhs) ->
+                    return (UnaryOp Bool BooleanNotOp (BinaryOp Bool OrOp lhs rhs)) -- by De Moran's theorem
+                BinaryOp Bool OrOp (UnaryOp Bool BooleanNotOp lhs) (UnaryOp Bool BooleanNotOp rhs) ->
+                    return (UnaryOp Bool BooleanNotOp (BinaryOp Bool AndOp lhs rhs)) -- by De Moran's theorem
+
                 _ -> return val
             logMsgLn (concat2WithPadding 12 "   into:" (show val'))
             return val'

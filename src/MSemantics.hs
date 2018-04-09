@@ -418,6 +418,7 @@ analyzeAST ast = do
                     logMsgLn "-- analyzing Return statement"
                     logTreeLines 4 stmt
                     (t, v) <- analyzeExpr expr
+
                     bb <- newBasicBlock [] (Return (Just (toMilType t, v)))
                     return [bb]
                 _ -> unimplementedFeatureError (positionOf stmt) ("Unsuported statement")
@@ -525,6 +526,7 @@ analyzeAST ast = do
             Vars vars t -> do
                 logMsgLn "-- found variable declarations"
                 assertTypeDefined t
+                when (mapNoPos isUserType t) (unimplementedFeatureError (positionOf t) ("User defined type " ++ mapNoPos show t))
                 mapM_ visitVar vars
                 where
                     visitVar :: WithPos DeclSpec -> MSemanticAnalyzer ()
@@ -539,7 +541,8 @@ analyzeAST ast = do
             Fun n rt ps _ _ -> do
                 logMsgLn "-- found function declaration"
                 assertTypeDefined rt
-                mapM_ (assertTypeDefined . paramType . removePos) ps
+                assertNotUserType rt
+                mapM_ ((\t -> assertTypeDefined t >> assertNotUserType t). paramType . removePos) ps
                 let name = mapNoPos midName n
                     rtype = removePos rt
                     params = Prelude.map (mapNoPos collectParams) ps
@@ -548,6 +551,8 @@ analyzeAST ast = do
                 label <- getFunctionLabel name
                 defineSymbol name pos (MFunSym params rtype label)
             _ -> return ()
+            where
+                assertNotUserType t = when (mapNoPos isUserType t) (unimplementedFeatureError (positionOf t) ("User defined type " ++ mapNoPos show t))
 
         -- collector for function definitions/implementations
         --
@@ -571,6 +576,7 @@ analyzeAST ast = do
                 collectDecls decls
                 logMsgLn "Anallyzing function body"
                 bbs <- analyzeStatements stmts
+                mapM_ checkReturnType stmts
                 let fbody = Function label (Just (toMilType rett)) (List.map (toMilType.fst) paramt) bbs
                 pushMilFunction fbody
                 logMsgLn "Generated MIL for function body:"
@@ -587,14 +593,19 @@ analyzeAST ast = do
                         defineSymbol pname ppos (MVarSym (removePos ptype) (i+1) pdim MParameter)
                         collectParams paramDecls
                     -- helpder for checking the return type of the function and returned values match
-                    checkReturnType :: BasicBlock -> MSemanticAnalyzer ()
-                    checkReturnType (BasicBlock _ _ (Return (Just (t, _)))) = do
-                        let p@(AlexPn _ l c) = positionOf rt
-                        source <- fromEnv compSource
-                        assertThat (t == mapNoPos toMilType rt) p $ concat
-                            [ "Return expression is of type ", show t, "but function expects ", mapNoPos show rt, "\n"
-                            , showCodeAt source l c
-                            ]
+                    checkReturnType :: WithPos MStatement -> MSemanticAnalyzer ()
+                    checkReturnType s = case removePos s of
+                        MReturn expr -> do
+                            (t, _) <- analyzeExpr expr
+                            source <- fromEnv compSource
+                            assertThat (removePos rt == t) (positionOf expr) $ concat
+                                [ "Return expression is of type ", show t, " but function return type is ", mapNoPos show rt, "\n"
+                                , let (AlexPn _ l c) = positionOf expr in showCodeAt source l c, "\n"
+                                , "function return type defined at ", showAlexPos (positionOf rt), "\n"
+                                , let (AlexPn _ l c) = positionOf rt in showCodeAt source l c
+                                ]
+                        CodeBlock (MScope _ ss) -> mapM_ checkReturnType ss
+                        _ -> return ()
             _ -> return ()
 
         -- perfrom semantic analysis on an expression
@@ -648,7 +659,7 @@ analyzeAST ast = do
                         else if op `elem` [MAnd, MOr]
                             then do
                                 assertThat (ltype == MBool) pos $ concat
-                                    [ "Operation ", show op, " can only be done on values of type Bool, not", show ltype, "\n"
+                                    [ "Operation ", show op, " can only be done on values of type Bool, not ", show ltype, "\n"
                                     , showCodeAt source opl opc
                                     ]
                                 return (MBool, BinaryOp Bool (toMilOp op) lval rval)
@@ -712,9 +723,9 @@ analyzeAST ast = do
                                     [ "Argument ", show i, " has type ", show argT
                                     , " but function ", show name, " expects ", show paramT, ":\n"
                                     , showCodeAt source argl argc, "\n"
-                                    , "function call at:\n"
+                                    , "function call at ", showAlexPos pos,":\n"
                                     , showCodeAt source l c, "\n"
-                                    , "Function declared at:\n"
+                                    , "function declared at ", showAlexPos declPos,":\n"
                                     , showCodeAt source decll declc, "\n"
                                     ]
                                 assertArgsMatch (i+1) argTs params
@@ -769,6 +780,12 @@ analyzeAST ast = do
             MReal -> F32
             MChar -> Char
             MBool -> Bool
+            _ -> undefined
+
+        -- helpder for identifying user defined types
+        isUserType :: MType -> Bool
+        isUserType (MUserType _) = True
+        isUserType _ = False
 
 -- run semantic analysis in a compiler monad instance
 runSemanticAnalyzer :: Monad m => (AST -> MSemanticAnalyzer a) -> AST -> MSemanticAnalyzerEnvironment -> CompilerMonadT (a, MSemanticAnalyzerState) m
