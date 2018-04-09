@@ -640,7 +640,7 @@ analyzeAST ast = do
                         return (ltype, BinaryOp (toMilType ltype) (toMilOp op) lval rval)
                     else if op `elem` [MEqual, MLessThan, MLessEqual, MGreaterThan, MGreaterEqual]
                         then do
-                            assertThat (ltype == MInt || ltype == MReal) pos $ concat
+                            assertThat (ltype == MInt || ltype == MReal || ltype == MChar) pos $ concat
                                 [ "Operation ", show op, " can only be done on values of type MInt and MReal, not ", show ltype, "\n"
                                 , showCodeAt source opl opc
                                 ]
