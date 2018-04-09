@@ -146,6 +146,7 @@ doCompilation f getSource options = do
     let mil = generatedMil state
     logMil mil
     optMil <- optimize (OptimizerEnvironment {optLevel = milcOptLevel options}) mil
+    liftIO $ print optMil
     -- targetCode <- generateRSMCode optMil
     -- let codegenEnv = CodeGeneratorEnvironment {codegenSource=s, codegenSourceFile=f, codegenOutDir = milcOutDir options}
     -- writeEncodeTargetCode codegenEnv targetCode
