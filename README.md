@@ -1,7 +1,9 @@
 # Milc - the Minisculus Intermediate Language Compiler
 
-Milc is a small compiler for the Minisculus language written in Haskell. It
-targets Robin's Stack Machine and generates code as a self-contained csh script.
+Milc is a small compiler for the M language written in Haskell. It currently
+only produces the intermediate language and does not generate target code.
+Instead, the intermediate language is printed to standard output. In addition,
+milc also packs a few neat features.
 
 ## Feature overview
 
@@ -14,11 +16,20 @@ Some note-worthy features include:
 - reports line and column number of errors
 - reports file containing the reported error (if not reading from standard input)
 - shows source code line(s) where an error is found
-- generates self-contained csh scripts as target
 - uses an expressive intermediate language called MIL
-- can do a few simple optimizations (enabled using `-O1`)
+- can do a few simple optimizations
 - can generate detailed log files of compilations (use `-l` option)
 - supports various command line options (use `--help` for more details)
+
+## Feature disclaimer
+
+Although milc can parse and type-check both arrays and user defined data-types,
+which are both part of the M++ language, it will not generate code for them and
+throw an error if used.
+
+Also, milc does not guarantee evaluation order for sub-expressions and function
+parameters as the M language does not define this. Calling functions with
+visible side effects in sub-expressions should, therefore, be avoided.
 
 ## Dependencies
 
@@ -92,7 +103,7 @@ in the `out/` directory. It will also generate a log file called `milc.log`.
 The `test/` directory contains some sample tests for the compiler. Tests are
 organized in several sub-directories:
 
-- `test/from_assignment*`: contains tests provided as part of the assignments
+- `test/unimplemented_features`: contains tests for partially supported features
 - `test/good`: contains "well-formed" test files that should compile successfully
 - `test/bad`: contains test files that should cause compilation failures
 
