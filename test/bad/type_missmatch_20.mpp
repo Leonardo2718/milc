@@ -1,0 +1,1 @@
+fun bar():int { return 1.0; };

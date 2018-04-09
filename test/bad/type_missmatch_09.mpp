@@ -1,0 +1,4 @@
+var a:int;
+var b:real;
+
+print a < b;

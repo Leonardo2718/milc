@@ -1,0 +1,7 @@
+fun bar():real {
+    var x:int;
+    begin
+        x := 2;
+        return x;
+    end
+};

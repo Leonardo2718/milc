@@ -1,0 +1,7 @@
+fun bar():int {
+    var x:int;
+    begin
+        x := 2;
+        return float(x);
+    end
+};

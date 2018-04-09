@@ -1,0 +1,3 @@
+fun bar(y:bool):bool { return true; };
+
+print bar(1);

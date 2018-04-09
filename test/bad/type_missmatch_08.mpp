@@ -1,0 +1,4 @@
+var a:bool;
+var b:bool;
+
+print a < b;

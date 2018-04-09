@@ -1,10 +1,13 @@
 var a,b,c,d,e,f:int;
 var bar:real;
+var x,y,z:bool;
 
 a := 1;
 b := a + 1;
 c := b - a;
 d := c * 1;
+e := - (1 + 1);
+f := 1 + (-1);
 
 if a + b + c + d = 0 then print 0 else print 1;
 
@@ -22,4 +25,13 @@ bar := bar + bar;
 print bar - bar;
 bar := 4.0 + 5.0;
 bar := 0.0 - bar;
+bar := - (1.0 - 2.0);
+bar := 1.0 - (-1.0);
 
+x := true || false || true;
+y := true && false && true;
+z := not (true || false);
+print not (true && false);
+print not z;
+print not x || not y || not z;
+print not x && not y && not z;
