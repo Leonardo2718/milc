@@ -122,6 +122,7 @@ basicBlockMerging f@(Function label rt paramt bbs) = do
     return f'
     where
         mergeBlocks :: Monad m => CFG -> [BasicBlock] -> CompilerMonadT [BasicBlock] m
+        mergeBlocks _ [] = return []
         mergeBlocks _ [bb] = return [bb]
         mergeBlocks cfg (bb1:bbs) = do
             bb2:bbs' <- mergeBlocks cfg bbs

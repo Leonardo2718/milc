@@ -1,8 +1,8 @@
 var foo:int;
 
-if 1 then { print 0; } else { print 1; };
+if true then { print 0; } else { print 1; };
 
-while 0 do { read foo; };
+while false do { read foo; };
 
 /* skip CaseOf for now */
 

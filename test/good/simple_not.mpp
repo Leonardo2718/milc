@@ -1,0 +1,11 @@
+var b:bool;
+
+begin
+
+read b;
+print b;
+
+if b then print false
+     else print true;
+
+end

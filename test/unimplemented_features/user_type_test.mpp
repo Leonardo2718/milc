@@ -1,3 +1,11 @@
+data intlist = #NIL
+             | #CONS of int * intlist;
+
+data inttree = #LEAF   of int
+             | #BRANCH of inttree * inttree;
+
+var L:intlist;
+
 data IntList = #IEMPTY | #ILIST of int * IntList;
 
 fun printIntList(l:IntList):bool {

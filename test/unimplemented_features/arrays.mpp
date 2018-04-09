@@ -1,0 +1,12 @@
+
+var A[3][3]:real;
+var c[20]:char;
+var v1,v2[3],v4[4][3]:real;
+
+fun merge (x[]:int, y[]:bool, r[]:int):int { return true; };
+
+v2[v1] := v1;
+v3[y][0] := v2[ 1 * v2[1] ];
+v3[0][v2[v1] - 1] := max(y, z);
+
+print not merge(A[0], A[1], A[2]);
