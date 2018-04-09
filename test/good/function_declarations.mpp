@@ -1,2 +1,2 @@
 fun max (n:int, m:int):int { var ans:int; return 0; };
-fun merge (x[]:int, y[]:bool, r[]:int):int { return true; };
+fun merge (x[]:int, y[]:bool, r[]:int):bool { return true; };
