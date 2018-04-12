@@ -34,6 +34,7 @@ import MParser
 import MSemantics
 import MIL
 import MilcOptimizer
+import AMCodeGenerator
 -- import MRDParser
 -- import MILGenerator
 -- import MEncoder
@@ -146,7 +147,8 @@ doCompilation f getSource options = do
     let mil = generatedMil state
     logMil mil
     optMil <- optimize (OptimizerEnvironment {optLevel = milcOptLevel options}) mil
-    liftIO $ print optMil
+    amCode <- generateAMCode optMil
+    liftIO $ print amCode
     -- targetCode <- generateRSMCode optMil
     -- let codegenEnv = CodeGeneratorEnvironment {codegenSource=s, codegenSourceFile=f, codegenOutDir = milcOutDir options}
     -- writeEncodeTargetCode codegenEnv targetCode

@@ -79,8 +79,8 @@ executable milc
   -- Modules included in this executable, other than Main.
   -- other-modules: CompilerEnvironment, MilcUtils, MLexer, MilcAST, MRDParser,
   --   MIL, MILGenerator, MilcCFG, MilcOptimizer, MEncoder, RSMGenerator
-  other-modules: CompilerEnvironment, MilcUtils, MLexer, MParser, MSemantics,
-    MilcCFG, MilcOptimizer
+  other-modules: CompilerEnvironment, MilcUtils, MLexer, MilcAST, MParser,
+    MSemantics, MIL, MilcCFG, MilcOptimizer, AMCodeGenerator
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
