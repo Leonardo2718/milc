@@ -315,7 +315,15 @@ analyzeAST ast = do
             logMsgLn "Analyzing global scope"
             pushNewScope
             prog <- analyzeScope scope
-            let mainf = Function "__main__" Nothing [] prog
+            symbols <- getTopScope
+            let varTypes = List.map (toMilType . MSemantics.varType . symInfo) $ HashMap.elems vars
+                vars = HashMap.filter isVar symbols
+                isVar sym = case symInfo sym of
+                    MVarSym _ _ _ MVariable -> True
+                    _ -> False
+            allocFrame <- newBasicBlock [AllocateFrame varTypes] Fallthrough
+            freeFrame <- newBasicBlock [ReleaseFrame varTypes] Fallthrough
+            let mainf = Function "main__" Nothing [] ([allocFrame] ++ prog ++ [freeFrame])
             pushMilFunction mainf
             logMsgLn "Generated MIL for main function:"
             logFunction mainf
@@ -436,7 +444,7 @@ analyzeAST ast = do
                                     ]
                         unless (List.null dims) (unimplementedFeatureError pos "Use of arrays")
                         mapM_ analyzeExpr dims
-                        return (tt, StackLocal name (toMilType tt) (ConstI32 off) (ConstI32 level))
+                        return (tt, StackLocal name (toMilType tt) off level)
                     MSymbolEntry _ declPos@(AlexPn _ l' c') _ -> semanticError pos $
                         concat  [ show name, " is not a variable:\n"
                                 , showCodeAt source l c, "\n"
@@ -548,7 +556,7 @@ analyzeAST ast = do
                     params = Prelude.map (mapNoPos collectParams) ps
                     collectParams p = (removePos (paramType p), paramDim p)
                     pos = positionOf n
-                label <- getFunctionLabel name
+                label <- getFunctionLabel "function"
                 defineSymbol name pos (MFunSym params rtype label)
             _ -> return ()
             where
@@ -577,7 +585,15 @@ analyzeAST ast = do
                 logMsgLn "Anallyzing function body"
                 bbs <- analyzeStatements stmts
                 mapM_ checkReturnType stmts
-                let fbody = Function label (Just (toMilType rett)) (List.map (toMilType.fst) paramt) bbs
+                symbols <- getTopScope
+                let varTypes = List.map (toMilType . MSemantics.varType . symInfo) $ HashMap.elems vars
+                    vars = HashMap.filter isVar symbols
+                    isVar sym = case symInfo sym of
+                        MVarSym _ _ _ MVariable -> True
+                        _ -> False
+                allocFrame <- newBasicBlock [AllocateFrame varTypes] Fallthrough
+                freeFrame <- newBasicBlock [ReleaseFrame varTypes] Fallthrough
+                let fbody = Function label (Just (toMilType rett)) (List.map (toMilType.fst) paramt) ([allocFrame] ++ bbs ++ [freeFrame])
                 pushMilFunction fbody
                 logMsgLn "Generated MIL for function body:"
                 logFunction fbody
@@ -712,7 +728,7 @@ analyzeAST ast = do
                             ]
                         args' <- mapM analyzeExpr args
                         assertArgsMatch 0 args' paramt
-                        return (rt, Call (FunctionLabel label (Just (toMilType rt)) (List.map (toMilType.fst) paramt) (ConstI32 level)) (List.map snd args'))
+                        return (rt, Call (FunctionLabel label (Just (toMilType rt)) (List.map (toMilType.fst) paramt) level) (List.map snd args'))
                         where
                             assertArgsMatch :: Int -> [(MType, MilValue)] -> [(MType, Int)] -> MSemanticAnalyzer ()
                             assertArgsMatch _ [] [] = return ()
@@ -748,7 +764,7 @@ analyzeAST ast = do
                                     , showCodeAt source opl opc
                                     ]
                         mapM_ analyzeExpr dims
-                        return (tt, Load (StackLocal name (toMilType tt) (ConstI32 off) (ConstI32 level)))
+                        return (tt, Load (StackLocal name (toMilType tt) off level))
                     MSymbolEntry _ declPos@(AlexPn _ l c) _ -> semanticError pos $
                         concat  [ show name, " is not a variable:\n"
                                 , showCodeAt source opl opc, "\n"

@@ -69,6 +69,12 @@ concat2WithPadding :: Int -> String -> String -> String
 concat2WithPadding n a b = concat [a, padding, b] where
     padding = take (n - length a) (repeat ' ')
 
+padRight :: Int -> String -> String
+padRight n str = str ++ take (n - length str) (repeat ' ')
+
+padLeft :: Int -> String -> String
+padLeft n str = take (n - length str) (repeat ' ') ++ str
+
 -- given a monadic action, produces an action that takes some value, performs
 -- the input action, and simply returns (forwards) the input value, discarding
 -- the result of the input action

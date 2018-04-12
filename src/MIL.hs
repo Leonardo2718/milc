@@ -38,8 +38,8 @@ import Data.List
 data MilType = I32 | F32 | Char | Bool | Pointer | StackPointer | HeapPointer deriving (Eq, Show)
 
 -- MIL symbol data type
-data Symbol = StackLocal {symbolName :: String, symbolType :: MilType, frameOffset :: MilValue, staticLink :: MilValue}
-            | FunctionLabel {symbolName :: String, returnType :: Maybe MilType, parameterTypes :: [MilType], staticLink :: MilValue}
+data Symbol = StackLocal {symbolName :: String, symbolType :: MilType, frameOffset :: Int, staticLink :: Int}
+            | FunctionLabel {symbolName :: String, returnType :: Maybe MilType, parameterTypes :: [MilType], staticLink :: Int}
             deriving (Eq, Show)
 
 -- MIL binary operations
@@ -66,6 +66,18 @@ data MilValue   = BinaryOp MilType BinaryOp MilValue MilValue   -- result of bin
                 -- | HeapLoad MilValue                             -- result of loading a value from the heap
                 | Call Symbol [MilValue]                        -- result of calling a function
                 deriving (Eq, Show)
+
+milTypeOf :: MilValue -> MilType
+milTypeOf op = case op of
+    BinaryOp t _ _ _ -> t
+    UnaryOp t _ _ -> t
+    ConstI32 _ -> I32
+    ConstF32 _ -> F32
+    ConstChar _ -> Char
+    ConstBool _ -> Bool
+    Load (StackLocal _ t _ _) -> t
+    LoadOffset t _ _ _ -> t
+    Call (FunctionLabel _ (Just t) _ _) _ -> t
 
 showMilValue :: String -> MilValue -> String
 showMilValue lead val = lead ++ case val of
