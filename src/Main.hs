@@ -35,9 +35,9 @@ import MSemantics
 import MIL
 import MilcOptimizer
 import AMCodeGenerator
+import MEncoder
 -- import MRDParser
 -- import MILGenerator
--- import MEncoder
 -- import RSMGenerator
 
 -- system imports
@@ -142,16 +142,14 @@ doCompilation f getSource options = do
     let sourceFile = if f == "" then "standard input" else f
     logMsgLn $ concat ["======= Compiling ", sourceFile , " ======="]
     t <- parse $ LexerEnvironment {lexSource = s, lexSourceFile = f}
-    -- liftIO $ print t
     (_, state) <- runSemanticAnalyzer analyzeAST t (MSemanticAnalyzerEnvironment {compSource = s, compSourceFile = f})
     let mil = generatedMil state
     logMil mil
     optMil <- optimize (OptimizerEnvironment {optLevel = milcOptLevel options}) mil
     amCode <- generateAMCode optMil
     liftIO $ print amCode
-    -- targetCode <- generateRSMCode optMil
-    -- let codegenEnv = CodeGeneratorEnvironment {codegenSource=s, codegenSourceFile=f, codegenOutDir = milcOutDir options}
-    -- writeEncodeTargetCode codegenEnv targetCode
+    let codegenEnv = CodeGeneratorEnvironment {codegenSource=s, codegenSourceFile=f, codegenOutDir = milcOutDir options}
+    writeEncodeTargetCode codegenEnv amCode
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"
 
 -- run the different stages of the compiler (currently only lexer)

@@ -106,8 +106,10 @@ data OpCode = Read Symbol
                 , targetVal :: MilValue
                 }
             -- | Call (Maybe Symbol) Symbol [MilValue]
-            | AllocateFrame {localTypes :: [MilType]}
-            | ReleaseFrame {localTypes :: [MilType]}
+            | AllocateSlots {localTypes :: [MilType]}
+            | ReleaseSlots {localTypes :: [MilType]}
+            | PushBlock
+            | PopBlock
             deriving (Eq, Show)
 
 showOpCode :: String -> String -> OpCode -> String

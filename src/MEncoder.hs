@@ -45,7 +45,7 @@ class TargetCode c where
     writeEncodeTargetCode env code = if codegenSourceFile env == ""
         then liftIO . encodeToFile code $ stdout
         else do
-            let outFile = replaceExtension target "csh"
+            let outFile = replaceExtension target "am"
                 target  = if codegenOutDir env == ""
                           then source
                           else replaceDirectory source (codegenOutDir env)

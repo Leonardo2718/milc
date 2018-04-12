@@ -80,7 +80,7 @@ executable milc
   -- other-modules: CompilerEnvironment, MilcUtils, MLexer, MilcAST, MRDParser,
   --   MIL, MILGenerator, MilcCFG, MilcOptimizer, MEncoder, RSMGenerator
   other-modules: CompilerEnvironment, MilcUtils, MLexer, MilcAST, MParser,
-    MSemantics, MIL, MilcCFG, MilcOptimizer, AMCodeGenerator
+    MSemantics, MIL, MilcCFG, MilcOptimizer, AMCodeGenerator, MEncoder
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:

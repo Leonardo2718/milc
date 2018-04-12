@@ -321,8 +321,8 @@ analyzeAST ast = do
                 isVar sym = case symInfo sym of
                     MVarSym _ _ _ MVariable -> True
                     _ -> False
-            allocFrame <- newBasicBlock [AllocateFrame varTypes] Fallthrough
-            freeFrame <- newBasicBlock [ReleaseFrame varTypes] Fallthrough
+            allocFrame <- newBasicBlock [AllocateSlots varTypes] Fallthrough
+            freeFrame <- newBasicBlock [ReleaseSlots varTypes] Fallthrough
             let mainf = Function "main__" Nothing [] ([allocFrame] ++ prog ++ [freeFrame])
             pushMilFunction mainf
             logMsgLn "Generated MIL for main function:"
@@ -419,8 +419,8 @@ analyzeAST ast = do
                         isVar sym = case symInfo sym of
                             MVarSym _ _ _ MVariable -> True
                             _ -> False
-                    allocFrame <- newBasicBlock [AllocateFrame varTypes] Fallthrough
-                    freeFrame <- newBasicBlock [ReleaseFrame varTypes] Fallthrough
+                    allocFrame <- newBasicBlock [PushBlock, AllocateSlots varTypes] Fallthrough
+                    freeFrame <- newBasicBlock [ReleaseSlots varTypes, PopBlock] Fallthrough
                     return ([allocFrame] ++ bbs ++ [freeFrame])
                 MReturn expr -> do
                     logMsgLn "-- analyzing Return statement"
@@ -591,8 +591,8 @@ analyzeAST ast = do
                     isVar sym = case symInfo sym of
                         MVarSym _ _ _ MVariable -> True
                         _ -> False
-                allocFrame <- newBasicBlock [AllocateFrame varTypes] Fallthrough
-                freeFrame <- newBasicBlock [ReleaseFrame varTypes] Fallthrough
+                allocFrame <- newBasicBlock [AllocateSlots varTypes] Fallthrough
+                freeFrame <- newBasicBlock [ReleaseSlots varTypes] Fallthrough
                 let fbody = Function label (Just (toMilType rett)) (List.map (toMilType.fst) paramt) ([allocFrame] ++ bbs ++ [freeFrame])
                 pushMilFunction fbody
                 logMsgLn "Generated MIL for function body:"

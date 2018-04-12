@@ -32,8 +32,10 @@ module AMCodeGenerator where
 import CompilerEnvironment
 import MilcUtils
 import MIL
+import MEncoder
 
 import Control.Monad.Identity
+import System.IO
 
 type AMLabel = String
 
@@ -100,10 +102,12 @@ instance Show AMLine where
         where
             strInstruction = case instruction of
                 LABEL str -> str ++ ":"
+                JUMP str -> indent ++ "JUMP " ++ str
+                JUMP_C str -> indent ++ "JUMP_C " ++ str
                 LOAD_F f -> indent ++ "LOAD_F " ++ show f
                 LOAD_I i -> indent ++ "LOAD_I " ++ show i
-                LOAD_C c -> indent ++ "LOAD_C " ++ show c
-                LOAD_B b -> indent ++ "LOAD_B " ++ show b
+                LOAD_C c -> indent ++ "LOAD_C " ++ ('"':c:'"':"")
+                LOAD_B b -> indent ++ "LOAD_B " ++ if b then "true" else "false"
                 LOAD_O i -> indent ++ "LOAD_O " ++ show i
                 STORE_O i ->  indent ++ "STORE_O " ++ show i
                 ALLOC i -> indent ++ "ALLOC " ++ show i
@@ -115,6 +119,9 @@ newtype AM = AM [AMLine] deriving (Eq)
 
 instance Show AM where
     show (AM ls) = unlines . map show $ ls
+
+instance TargetCode AM where
+    encodeToFile code h = hPutStrLn h (show code) where
 
 type AMGenerator a m = CompilerMonadT a m
 
@@ -140,7 +147,7 @@ fromBasicBlock :: Monad m => BasicBlock -> AMGenerator [AMLine] m
 fromBasicBlock bb@(BasicBlock bbid opcodes terminator) = do
     ops <- mapM fromOpCode opcodes
     term <- fromTerminator terminator
-    return (AMLine (LABEL ("label_" ++ show bbid)) Nothing: concat ops ++ term)
+    return (AMLine (LABEL (bbIdAsLabel bbid)) Nothing: concat ops ++ term)
 
 -- generate AM code for a MIL opcode
 fromOpCode :: Monad m => OpCode -> AMGenerator [AMLine] m
@@ -169,15 +176,36 @@ fromOpCode opcode = case opcode of
         frameCalc <- genVarFrameCalculation sym
         let storeVar = [AMLine (STORE_O (frameOffset sym)) (Just ("Storing to variable " ++ show (symbolName sym)))]
         return $ valCalc ++ frameCalc ++ storeVar
-    AllocateFrame ts -> return [AMLine (ALLOC n) (Just ("Allocation " ++ show n ++ " stack frames (local variables)"))] where
+    AllocateSlots ts -> return [AMLine (ALLOC n) (Just ("Allocation " ++ show n ++ " stack frames (local variables)"))] where
         n = length ts
-    ReleaseFrame ts -> return [AMLine (ALLOC (-n)) (Just ("Freeing " ++ show n ++ " stack frames (local variables)"))] where
+    ReleaseSlots ts -> return [AMLine (ALLOC (-n)) (Just ("Freeing " ++ show n ++ " stack frames (local variables)"))] where
         n = length ts
-    _ -> return []
+    PushBlock -> return
+        [ AMLine (LOAD_R AMFramePointer) (Just ("Pushing stack frame for M block"))
+        , AMLine (ALLOC 2) Nothing
+        , AMLine (LOAD_R AMStackPointer) Nothing
+        , AMLine (STORE_R AMFramePointer) Nothing
+        ]
+    PopBlock -> return
+        [ AMLine (ALLOC (-2)) (Just ("Poping stack frame for M block"))
+        , AMLine (STORE_R AMFramePointer) Nothing
+        ]
+    _ -> codegenError $ ("Unimplemented operation: " ++ show opcode)
 
 -- generate AM code for a basic block terminator
 fromTerminator :: Monad m => Terminator -> AMGenerator [AMLine] m
-fromTerminator terminator = return []
+fromTerminator terminator = case terminator of
+    Jump label -> return [AMLine (JUMP (bbIdAsLabel label)) Nothing]
+    BranchZero val label -> do
+        valCalc <- fromMilValue val
+        let brz = [AMLine (JUMP_C (bbIdAsLabel label)) Nothing]
+        return (valCalc ++ brz)
+    Branch val label -> do
+        valCalc <- fromMilValue val
+        let brc = [AMLine (APP NOT) Nothing, AMLine (JUMP_C (bbIdAsLabel label)) Nothing]
+        return (valCalc ++ brc)
+    Fallthrough -> return []
+    _ -> codegenError $ ("Unimplemented operation: " ++ show terminator)
 
 -- generate AM code for a MIL value
 fromMilValue :: Monad m => MilValue -> AMGenerator [AMLine] m
@@ -252,6 +280,9 @@ genVarFrameCalculation (StackLocal name _ offset link) =
         chaseLinkPointer 0 = []
         chaseLinkPointer n = AMLine (LOAD_O (-2)) (Just "`-| chasing static link pointer"): chaseLinkPointer (n - 1)
 genVarFrameCalculation sym = codegenError ("Cannot calculate stack position of " ++ show sym)
+
+bbIdAsLabel :: BlockId -> String
+bbIdAsLabel bbid = "label_" ++ show bbid
 
 -- emit a code generation (internal) error
 codegenError :: Monad m => String -> AMGenerator a m
