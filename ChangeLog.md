@@ -1,5 +1,10 @@
 # Revision history for milc
 
+## 0.3.0.0  -- 2018-04-13
+
+* Implemented code generator targeting the AM stack machine
+* Added new, relevant tests
+
 ## 0.2.2.1  -- 2018-04-08
 
 * Implement proper M compiler
