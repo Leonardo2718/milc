@@ -147,7 +147,7 @@ doCompilation f getSource options = do
     logMil mil
     optMil <- optimize (OptimizerEnvironment {optLevel = milcOptLevel options}) mil
     amCode <- generateAMCode optMil
-    liftIO $ print amCode
+    -- liftIO $ print amCode
     let codegenEnv = CodeGeneratorEnvironment {codegenSource=s, codegenSourceFile=f, codegenOutDir = milcOutDir options}
     writeEncodeTargetCode codegenEnv amCode
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"

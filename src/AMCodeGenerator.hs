@@ -114,11 +114,13 @@ instance Show AMLine where
                 _ -> indent ++ show instruction
             indent = "    "
 
+showAMLines :: [AMLine] -> String
+showAMLines = unlines . map show
 
 newtype AM = AM [AMLine] deriving (Eq)
 
 instance Show AM where
-    show (AM ls) = unlines . map show $ ls
+    show (AM ls) = showAMLines ls
 
 instance TargetCode AM where
     encodeToFile code h = hPutStrLn h (show code) where
@@ -128,13 +130,16 @@ type AMGenerator a m = CompilerMonadT a m
 -- generate AM code from MIL
 generateAMCode :: Monad m => Mil -> AMGenerator AM m
 generateAMCode mil@(Mil functions) = do
+    logMsgLn "=== Running code generation ==="
     code <- mapM fromFunction functions
     let progHeader = AMLine (LOAD_R AMStackPointer) (Just "Push SOMETHING to the first slot on the stack")
+    logMsgLn "=== Code generation completed successfully ==="
     return . AM $ progHeader : concat code
 
 -- generate AM code for a function
 fromFunction :: Monad m => Function -> AMGenerator [AMLine] m
 fromFunction fun@(Function label retType paramTypes localTypes body) = do
+    logMsgLn ("Generating code for function " ++ show label)
     body' <- mapM fromBasicBlock body
     let allocLocals =
             [ AMLine (LOAD_R AMStackPointer) (Just "Setting frame pointer to current frame")
@@ -146,166 +151,189 @@ fromFunction fun@(Function label retType paramTypes localTypes body) = do
         ret = if label == "main__"
                 then [AMLine (HALT) (Just "Ending program execution")]
                 else [AMLine (JUMP_S) (Just "Retruning to caller")]
-    return (AMLine (LABEL label) Nothing: allocLocals ++ concat body' ++ freeLocals ++ ret)
+        amcode = AMLine (LABEL label) Nothing: allocLocals ++ concat body' ++ freeLocals ++ ret
+    logMsgLn ("Generated code for " ++ show label ++ " is:")
+    logAMLines amcode
+    return amcode
 
 -- generate AM code for a basic block
 fromBasicBlock :: Monad m => BasicBlock -> AMGenerator [AMLine] m
 fromBasicBlock bb@(BasicBlock bbid opcodes terminator) = do
+    logMsgLn "Generating code for basic block:"
+    logBlock (show bb)
     ops <- mapM fromOpCode opcodes
     term <- fromTerminator terminator
-    return (AMLine (LABEL (bbIdAsLabel bbid)) Nothing: concat ops ++ term)
+    let amcode = (AMLine (LABEL (bbIdAsLabel bbid)) Nothing: concat ops ++ term)
+    logMsgLn "Generated code for basic block is:"
+    logAMLines amcode
+    return amcode
 
 -- generate AM code for a MIL opcode
 fromOpCode :: Monad m => OpCode -> AMGenerator [AMLine] m
-fromOpCode opcode = case opcode of
-    Read sym@(StackLocal{}) -> do
-        op <- case symbolType sym of
-            I32 -> return (AMLine READ_I Nothing)
-            F32 -> return (AMLine READ_F Nothing)
-            Char -> return (AMLine READ_C Nothing)
-            Bool -> return (AMLine READ_B Nothing)
-            t -> codegenError ("Read opcode for type " ++ show t ++ " is not support on the AM platform")
-        frameCalc <- genFrameCalculation sym
-        let storeVar = [AMLine (STORE_O (frameOffset sym)) (Just ("Storing to variable " ++ show (symbolName sym)))]
-        return $ op:frameCalc ++ storeVar
-    Print t val -> do
-        valCalc <- fromMilValue val
-        op <- case t of
-            I32 -> return [AMLine PRINT_I Nothing]
-            F32 -> return [AMLine PRINT_F Nothing]
-            Char -> return [AMLine PRINT_C Nothing]
-            Bool -> return [AMLine PRINT_B Nothing]
-            _ -> codegenError ("Print opcode for type " ++ show t ++ " is not support on the AM platform")
-        return $ valCalc ++ op
-    Store sym@(StackLocal{}) val -> do
-        valCalc <- fromMilValue val
-        frameCalc <- genFrameCalculation sym
-        let storeVar = [AMLine (STORE_O (frameOffset sym)) (Just ("Storing to variable " ++ show (symbolName sym)))]
-        return $ valCalc ++ frameCalc ++ storeVar
-    AllocateSlots ts -> return [AMLine (ALLOC n) (Just ("Allocation " ++ show n ++ " stack frames (local variables)"))] where
-        n = length ts
-    ReleaseSlots ts -> return [AMLine (ALLOC (-n)) (Just ("Freeing " ++ show n ++ " stack frames (local variables)"))] where
-        n = length ts
-    PushBlock -> return
-        [ AMLine (LOAD_R AMFramePointer) (Just ("Pushing stack frame for M block"))
-        , AMLine (ALLOC 2) Nothing
-        , AMLine (LOAD_R AMStackPointer) Nothing
-        , AMLine (STORE_R AMFramePointer) Nothing
-        ]
-    PopBlock -> return
-        [ AMLine (ALLOC (-2)) (Just ("Poping stack frame for M block"))
-        , AMLine (STORE_R AMFramePointer) Nothing
-        ]
-    _ -> codegenError $ ("Unimplemented operation: " ++ show opcode)
+fromOpCode opcode = do
+    logMsgLn ("-- generating code for opcde: " ++ show opcode)
+    amcode <- case opcode of
+        Read sym@(StackLocal{}) -> do
+            op <- case symbolType sym of
+                I32 -> return (AMLine READ_I Nothing)
+                F32 -> return (AMLine READ_F Nothing)
+                Char -> return (AMLine READ_C Nothing)
+                Bool -> return (AMLine READ_B Nothing)
+                t -> codegenError ("Read opcode for type " ++ show t ++ " is not support on the AM platform")
+            frameCalc <- genFrameCalculation sym
+            let storeVar = [AMLine (STORE_O (frameOffset sym)) (Just ("Storing to variable " ++ show (symbolName sym)))]
+            return $ op:frameCalc ++ storeVar
+        Print t val -> do
+            valCalc <- fromMilValue val
+            op <- case t of
+                I32 -> return [AMLine PRINT_I Nothing]
+                F32 -> return [AMLine PRINT_F Nothing]
+                Char -> return [AMLine PRINT_C Nothing]
+                Bool -> return [AMLine PRINT_B Nothing]
+                _ -> codegenError ("Print opcode for type " ++ show t ++ " is not support on the AM platform")
+            return $ valCalc ++ op
+        Store sym@(StackLocal{}) val -> do
+            valCalc <- fromMilValue val
+            frameCalc <- genFrameCalculation sym
+            let storeVar = [AMLine (STORE_O (frameOffset sym)) (Just ("Storing to variable " ++ show (symbolName sym)))]
+            return $ valCalc ++ frameCalc ++ storeVar
+        AllocateSlots ts -> return [AMLine (ALLOC n) (Just ("Allocation " ++ show n ++ " stack frames (local variables)"))] where
+            n = length ts
+        ReleaseSlots ts -> return [AMLine (ALLOC (-n)) (Just ("Freeing " ++ show n ++ " stack frames (local variables)"))] where
+            n = length ts
+        PushBlock -> return
+            [ AMLine (LOAD_R AMFramePointer) (Just ("Pushing stack frame for M block"))
+            , AMLine (ALLOC 2) Nothing
+            , AMLine (LOAD_R AMStackPointer) Nothing
+            , AMLine (STORE_R AMFramePointer) Nothing
+            ]
+        PopBlock -> return
+            [ AMLine (ALLOC (-2)) (Just ("Poping stack frame for M block"))
+            , AMLine (STORE_R AMFramePointer) Nothing
+            ]
+        _ -> codegenError $ ("Unimplemented operation: " ++ show opcode)
+    logMsgLn ("-- generated code for: " ++ show opcode)
+    logAMLines amcode
+    return amcode
 
 -- generate AM code for a basic block terminator
 fromTerminator :: Monad m => Terminator -> AMGenerator [AMLine] m
-fromTerminator terminator = case terminator of
-    Jump label -> return [AMLine (JUMP (bbIdAsLabel label)) Nothing]
-    BranchZero val label -> do
-        valCalc <- fromMilValue val
-        let brz = [AMLine (JUMP_C (bbIdAsLabel label)) Nothing]
-        return (valCalc ++ brz)
-    Branch val label -> do
-        valCalc <- fromMilValue val
-        let brc = [AMLine (APP NOT) Nothing, AMLine (JUMP_C (bbIdAsLabel label)) Nothing]
-        return (valCalc ++ brc)
-    Return (Just (_,val)) -> do
-        valCalc <- fromMilValue val
-        let saveRet =
-                [ AMLine (LOAD_R AMFramePointer) (Just "Saving return value")
-                , AMLine (STORE_O (-3)) (Just "")
-                ]
-        return (valCalc ++ saveRet)
-    Exit Nothing -> return [AMLine (HALT) Nothing]
-    Fallthrough -> return []
-    _ -> codegenError $ ("Unimplemented operation: " ++ show terminator)
+fromTerminator terminator = do
+    logMsgLn ("-- generating code for terminator: " ++ show terminator)
+    amcode <- case terminator of
+        Jump label -> return [AMLine (JUMP (bbIdAsLabel label)) Nothing]
+        BranchZero val label -> do
+            valCalc <- fromMilValue val
+            let brz = [AMLine (JUMP_C (bbIdAsLabel label)) Nothing]
+            return (valCalc ++ brz)
+        Branch val label -> do
+            valCalc <- fromMilValue val
+            let brc = [AMLine (APP NOT) Nothing, AMLine (JUMP_C (bbIdAsLabel label)) Nothing]
+            return (valCalc ++ brc)
+        Return (Just (_,val)) -> do
+            valCalc <- fromMilValue val
+            let saveRet =
+                    [ AMLine (LOAD_R AMFramePointer) (Just "Saving return value")
+                    , AMLine (STORE_O (-3)) (Just "")
+                    ]
+            return (valCalc ++ saveRet)
+        Exit Nothing -> return [AMLine (HALT) Nothing]
+        Fallthrough -> return []
+        _ -> codegenError $ ("Unimplemented operation: " ++ show terminator)
+    logMsgLn ("-- generated code for: " ++ show terminator)
+    logAMLines amcode
+    return amcode
 
 -- generate AM code for a MIL value
 fromMilValue :: Monad m => MilValue -> AMGenerator [AMLine] m
-fromMilValue val = case val of
-    BinaryOp _ op lhs rhs -> do
-        lhs' <- fromMilValue lhs
-        rhs' <- fromMilValue rhs
-        op' <- case (milTypeOf lhs, op) of
-            (I32, AddOp) -> return ADD
-            (I32, SubOp) -> return SUB
-            (I32, MulOp) -> return MUL
-            (I32, DivOp) -> return DIV
+fromMilValue val = do
+    logMsgLn ("-- generating code to calculate value: " ++ show val)
+    amcode <- case val of
+        BinaryOp _ op lhs rhs -> do
+            lhs' <- fromMilValue lhs
+            rhs' <- fromMilValue rhs
+            op' <- case (milTypeOf lhs, op) of
+                (I32, AddOp) -> return ADD
+                (I32, SubOp) -> return SUB
+                (I32, MulOp) -> return MUL
+                (I32, DivOp) -> return DIV
 
-            (F32, AddOp) -> return ADD_F
-            (F32, SubOp) -> return SUB_F
-            (F32, MulOp) -> return MUL_F
-            (F32, DivOp) -> return DIV_F
+                (F32, AddOp) -> return ADD_F
+                (F32, SubOp) -> return SUB_F
+                (F32, MulOp) -> return MUL_F
+                (F32, DivOp) -> return DIV_F
 
-            (I32, EQOp) -> return AMCodeGenerator.EQ
-            (I32, LTOp) -> return AMCodeGenerator.LT
-            (I32, LEOp) -> return AMCodeGenerator.LE
-            (I32, GTOp) -> return AMCodeGenerator.GT
-            (I32, GEOp) -> return AMCodeGenerator.GE
+                (I32, EQOp) -> return AMCodeGenerator.EQ
+                (I32, LTOp) -> return AMCodeGenerator.LT
+                (I32, LEOp) -> return AMCodeGenerator.LE
+                (I32, GTOp) -> return AMCodeGenerator.GT
+                (I32, GEOp) -> return AMCodeGenerator.GE
 
-            (F32, EQOp) -> return EQ_F
-            (F32, LTOp) -> return LT_F
-            (F32, LEOp) -> return LE_F
-            (F32, GTOp) -> return GT_F
-            (F32, GEOp) -> return GE_F
+                (F32, EQOp) -> return EQ_F
+                (F32, LTOp) -> return LT_F
+                (F32, LEOp) -> return LE_F
+                (F32, GTOp) -> return GT_F
+                (F32, GEOp) -> return GE_F
 
-            (Char, EQOp) -> return EQ_C
-            (Char, LTOp) -> return LT_C
-            (Char, LEOp) -> return LE_C
-            (Char, GTOp) -> return GT_C
-            (Char, GEOp) -> return GE_C
+                (Char, EQOp) -> return EQ_C
+                (Char, LTOp) -> return LT_C
+                (Char, LEOp) -> return LE_C
+                (Char, GTOp) -> return GT_C
+                (Char, GEOp) -> return GE_C
 
-            (Bool, AndOp) -> return AND
-            (Bool, OrOp) -> return OR
+                (Bool, AndOp) -> return AND
+                (Bool, OrOp) -> return OR
 
-            (t, _) -> codegenError $ concat ["Operation ", show op, " for type ", show t, " is not supported on the AM platform"]
-        return (lhs' ++ rhs' ++ [AMLine (APP op') Nothing])
-    UnaryOp _ op val -> do
-        val' <- fromMilValue val
-        op' <- case (milTypeOf val, op) of
-            (I32, NegativeOp) -> return NEG
-            (I32, FloatOp) -> return FLOAT
+                (t, _) -> codegenError $ concat ["Operation ", show op, " for type ", show t, " is not supported on the AM platform"]
+            return (lhs' ++ rhs' ++ [AMLine (APP op') Nothing])
+        UnaryOp _ op val -> do
+            val' <- fromMilValue val
+            op' <- case (milTypeOf val, op) of
+                (I32, NegativeOp) -> return NEG
+                (I32, FloatOp) -> return FLOAT
 
-            (F32, NegativeOp) -> return NEG_F
-            (F32, FloorOp) -> return FLOOR
-            (F32, CeilingOp) -> return CEIL
+                (F32, NegativeOp) -> return NEG_F
+                (F32, FloorOp) -> return FLOOR
+                (F32, CeilingOp) -> return CEIL
 
-            (Bool, BooleanNotOp) -> return NOT
+                (Bool, BooleanNotOp) -> return NOT
 
-            (t, _) -> codegenError $ concat ["Operation ", show op, " for type ", show t, " is not supported on the AM platform"]
-        return (val' ++ [AMLine (APP op') Nothing])
-    ConstI32 i -> return [AMLine (LOAD_I i) Nothing]
-    ConstF32 f -> return [AMLine (LOAD_F f) Nothing]
-    ConstChar c -> return [AMLine (LOAD_C c) Nothing]
-    ConstBool b -> return [AMLine (LOAD_B b) Nothing]
-    Load sym -> do
-        frameCalc <- genFrameCalculation sym
-        let varLoad = [AMLine (LOAD_O (frameOffset sym)) (Just ("Loading variable " ++ show (symbolName sym)))]
-        return $ frameCalc ++ varLoad
-    Call sym@(FunctionLabel{}) args -> do
-        argsCalc <- mapM fromMilValue args
-        linkCalc <- genFrameCalculation sym
-        let allocRetSlot = AMLine (ALLOC 1) (Just "Allocating stack slot for return value")
-            doCall =
-                [ AMLine (LOAD_R AMFramePointer) (Just "Saving frame pointer")
-                , AMLine (LOAD_R AMCodePointer) (Just "Saving return code")
-                , AMLine (JUMP (symbolName sym)) (Just "Calling function")
-                , AMLine (STORE_R AMFramePointer) (Just "Resetting frame pointer")
-                , AMLine (ALLOC (-1)) (Just "Popping static link pointer")
-                ]
-                ++
-                if null args then [] else
-                    [ AMLine (LOAD_R AMStackPointer) (Just "Saving returned value")
-                    , AMLine (STORE_O (- length args)) Nothing
+                (t, _) -> codegenError $ concat ["Operation ", show op, " for type ", show t, " is not supported on the AM platform"]
+            return (val' ++ [AMLine (APP op') Nothing])
+        ConstI32 i -> return [AMLine (LOAD_I i) Nothing]
+        ConstF32 f -> return [AMLine (LOAD_F f) Nothing]
+        ConstChar c -> return [AMLine (LOAD_C c) Nothing]
+        ConstBool b -> return [AMLine (LOAD_B b) Nothing]
+        Load sym -> do
+            frameCalc <- genFrameCalculation sym
+            let varLoad = [AMLine (LOAD_O (frameOffset sym)) (Just ("Loading variable " ++ show (symbolName sym)))]
+            return $ frameCalc ++ varLoad
+        Call sym@(FunctionLabel{}) args -> do
+            argsCalc <- mapM fromMilValue args
+            linkCalc <- genFrameCalculation sym
+            let allocRetSlot = AMLine (ALLOC 1) (Just "Allocating stack slot for return value")
+                doCall =
+                    [ AMLine (LOAD_R AMFramePointer) (Just "Saving frame pointer")
+                    , AMLine (LOAD_R AMCodePointer) (Just "Saving return code")
+                    , AMLine (JUMP (symbolName sym)) (Just "Calling function")
+                    , AMLine (STORE_R AMFramePointer) (Just "Resetting frame pointer")
+                    , AMLine (ALLOC (-1)) (Just "Popping static link pointer")
                     ]
-                ++
-                if length args > 1
-                    then [AMLine (ALLOC (1 - length args)) (Just "Popping arguments from function call")]
-                    else []
-            -- still need to recover return value
-        return (concat argsCalc ++ [allocRetSlot] ++ linkCalc ++ doCall)
-    _ -> codegenError $ ("Unimplemented operation: " ++ show val)
+                    ++
+                    if null args then [] else
+                        [ AMLine (LOAD_R AMStackPointer) (Just "Saving returned value")
+                        , AMLine (STORE_O (- length args)) Nothing
+                        ]
+                    ++
+                    if length args > 1
+                        then [AMLine (ALLOC (1 - length args)) (Just "Popping arguments from function call")]
+                        else []
+                -- still need to recover return value
+            return (concat argsCalc ++ [allocRetSlot] ++ linkCalc ++ doCall)
+        _ -> codegenError $ ("Unimplemented operation: " ++ show val)
+    logMsgLn ("-- generating code for: " ++ show val)
+    logAMLines amcode
+    return amcode
 
 genFrameCalculation :: Monad m => Symbol -> AMGenerator [AMLine] m
 genFrameCalculation sym =
@@ -322,3 +350,6 @@ bbIdAsLabel bbid = "label_" ++ show bbid
 -- emit a code generation (internal) error
 codegenError :: Monad m => String -> AMGenerator a m
 codegenError msg = logError ("Internal error: " ++ msg)
+
+logAMLines :: Monad m => [AMLine] -> AMGenerator () m
+logAMLines = logBlock . showAMLines
