@@ -1,9 +1,8 @@
 # Milc - the Minisculus Intermediate Language Compiler
 
-Milc is a small compiler for the M language written in Haskell. It currently
-only produces the intermediate language and does not generate target code.
-Instead, the intermediate language is printed to standard output. In addition,
-milc also packs a few neat features.
+Milc is a small compiler for the M language written in Haskell. It generates
+code targeting the AM stack machine. In addition, milc also packs a few neat
+features.
 
 ## Feature overview
 
@@ -18,6 +17,7 @@ Some note-worthy features include:
 - shows source code line(s) where an error is found
 - uses an expressive intermediate language called MIL
 - can do a few simple optimizations
+- generates code to `*.am` files
 - can generate detailed log files of compilations (use `-l` option)
 - supports various command line options (use `--help` for more details)
 
@@ -28,7 +28,7 @@ which are both part of the M++ language, it will not generate code for them and
 throw an error if used.
 
 Also, milc does not guarantee evaluation order for sub-expressions and function
-parameters as the M language does not define this. Calling functions with
+parameters as the M language does not define these. Calling functions with
 visible side effects in sub-expressions should, therefore, be avoided.
 
 ## Dependencies
@@ -98,6 +98,19 @@ $ cabal run -- test/good/* -d out -l
 This will compile all the test programs in `test/good/` and put all output files
 in the `out/` directory. It will also generate a log file called `milc.log`.
 
+## Running a sample program
+
+The following commands show how to run the Mandelbrot test on the CPSC servers:
+
+```
+$ mkdir out
+$ cabal run -- test/good/mandelbrot.mpp -d out -l
+$ alias AM='/usr/bin/sml @SMLload=/home/411/AM/am+.x86-linux'
+$ AM out/mandelbrot.am
+```
+
+Enjoy the view!
+
 ## Tests
 
 The `test/` directory contains some sample tests for the compiler. Tests are
@@ -106,6 +119,8 @@ organized in several sub-directories:
 - `test/unimplemented_features`: contains tests for partially supported features
 - `test/good`: contains "well-formed" test files that should compile successfully
 - `test/bad`: contains test files that should cause compilation failures
+- `test/py`: contains Python 3 scripts that produce the same output as some of the tests
+    - these are mostly useful for figuring out expected outputs
 
 ## License
 
