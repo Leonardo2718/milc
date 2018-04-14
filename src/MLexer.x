@@ -122,6 +122,7 @@ tokens :-
 <0>         \" $char \"         { emitToken (\s -> CHARVAL_T (s !! 1)) }-- "
 <0>         \" "\n" \"          { emitToken (\s -> CHARVAL_T '\n') }    -- "
 <0>         \" "\t" \"          { emitToken (\s -> CHARVAL_T '\t') }    -- "
+<0>         \" " " \"          { emitToken (\s -> CHARVAL_T ' ') }    -- "
 
             .           { lexerError (\s -> "Unrecognized character pattern strating with: " ++ s) }
 

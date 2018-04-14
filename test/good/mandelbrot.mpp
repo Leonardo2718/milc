@@ -7,12 +7,12 @@ var px,py:int;
 px := 0;
 py := 0;
 
-while (py < 46) do {
+while (py < 40) do {
     while (px < 80) do {
         var x0,y0,x,y:real;
         var iteration,max:int;
         x0 := float(px)/80.0 * 3.5 - 2.5;
-        y0 := float(py)/46.0 * 2.0 - 1.0;
+        y0 := float(py)/40.0 * 2.0 - 1.0;
         x := 0.0;
         y := 0.0;
         iteration := 0;
@@ -25,10 +25,10 @@ while (py < 46) do {
             iteration := iteration + 1;
         };
         px := px + 1;
-        if (iteration < 800) then {
-            print "o";
+        if (iteration < 130) then {
+            print " ";
         } else {
-            print "x";
+            print "o";
         };
     };
     px := 0;
