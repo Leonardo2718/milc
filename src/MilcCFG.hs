@@ -41,27 +41,27 @@ import Control.Monad
 data IncomingEdge   = IncomingJump BlockId
                     | IncomingBranch BlockId
                     | IncomingFallthrough BlockId
-                    | Start
+                    | FromStart
                     deriving (Eq)
 
 instance Show IncomingEdge where
     show (IncomingJump bbid) = "Jump " ++ show bbid
     show (IncomingBranch bbid) = "Branch " ++ show bbid
     show (IncomingFallthrough bbid) = "Fallthrough " ++ show bbid
-    show Start = "Start"
+    show FromStart = "FromStart"
 
 -- data type for representing outgoing CFG edges
 data OutgoingEdge   = OutgoingJump BlockId
                     | OutgoingBranch BlockId
                     | OutgoingFallthrough BlockId
-                    | Exit
+                    | ToExit
                     deriving (Eq)
 
 instance Show OutgoingEdge where
     show (OutgoingJump bbid) = "Jump " ++ show bbid
     show (OutgoingBranch bbid) = "Branch " ++ show bbid
     show (OutgoingFallthrough bbid) = "Fallthrough " ++ show bbid
-    show Exit = "Exit"
+    show ToExit = "ToExit"
 
 -- data type for the CFG itself
 --
@@ -126,14 +126,15 @@ addEdges ((BasicBlock bbid _ terminator):bb2:bbs) cfg = addEdges (bb2:bbs) cfg' 
         Branch _ target -> addBranch bbid target (blockId bb2) cfg
         BranchZero _ target -> addBranch bbid target (blockId bb2) cfg
         Fallthrough -> addFallthrough bbid (blockId bb2) cfg
-        Return _ -> addOutgoingEdge bbid Exit cfg
-addEdges [BasicBlock bbid _ _]  cfg = addOutgoingEdge bbid Exit cfg
+        Return _ -> addOutgoingEdge bbid ToExit cfg
+        Exit _ -> addOutgoingEdge bbid ToExit cfg
+addEdges [BasicBlock bbid _ _]  cfg = addOutgoingEdge bbid ToExit cfg
 addEdges [] cfg = cfg
 
 -- build CFG from MIL code
 buildCFG :: Monad m => Function -> CompilerMonadT CFG m
-buildCFG (Function _ _ _ blocks@(BasicBlock bbid _ _:_)) = return $ addEdges blocks (addIncomingEdge bbid Start empty)
-buildCFG (Function _ _ _ []) = return empty
+buildCFG (Function _ _ _ _ blocks@(BasicBlock bbid _ _:_)) = return $ addEdges blocks (addIncomingEdge bbid FromStart empty)
+buildCFG (Function _ _ _ _ []) = return empty
 
 -- log a CFG as a block
 logCFG :: Monad m => CFG -> CompilerMonadT () m

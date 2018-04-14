@@ -133,6 +133,7 @@ data Terminator = Jump {jumpTarget :: BlockId}
                 | BranchZero {jumpCondition :: MilValue, jumpTarget :: BlockId}
                 | Fallthrough
                 | Return {returnValue :: Maybe (MilType, MilValue)}
+                | Exit {exitValue :: Maybe MilValue}
                 deriving (Eq, Show)
 
 showTerminator :: String -> String -> Terminator -> String
@@ -160,6 +161,7 @@ data BasicBlock = BasicBlock    { blockId :: BlockId
 data Function = Function    { functionLabel :: String
                             , functionRetType :: Maybe MilType
                             , functionParamTypes :: [MilType]
+                            , functionLocalTypes :: [MilType]
                             , functionBody :: [BasicBlock]
                             }
 
@@ -180,8 +182,9 @@ instance Show BasicBlock where
         valPadding = padding ++ "`-|"
 
 instance Show Function where
-    show (Function label rt paramt body) = concat
+    show (Function label rt paramt localt body) = concat
         [ label, " ", show rt, " ", show paramt, "\n"
+        , "(", show localt, ")\n"
         , concat (take (length label) (repeat "=")), "\n"
         , showBBs body
         ]

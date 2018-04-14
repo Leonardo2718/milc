@@ -51,7 +51,7 @@ optimize env mil@(Mil functions) = do
     let
         optimizeUsing :: Monad m => [Function -> CompilerMonadT Function m] -> Function -> CompilerMonadT Function m
         optimizeUsing [] f = return f
-        optimizeUsing opts f@(Function label _ _ _) = do
+        optimizeUsing opts f@(Function label _ _ _ _) = do
             logMsgLn $ concat ["%%%%% Optimizing ", show label, " %%%%%"]
             logFunction f
             f' <- foldl (>>=) (return f) (intersperse (\ f -> logFunction f >> return f) opts)
@@ -108,7 +108,7 @@ helpMsg = intercalate "\n\n"
 --
 --
 basicBlockMerging :: Monad m => Function -> CompilerMonadT Function m
-basicBlockMerging f@(Function label rt paramt bbs) = do
+basicBlockMerging f@(Function label rt _ _ bbs) = do
     logMsgLn "%%% Performing: Basic Block Merging %%%"
     logMsgLn "-- building CFG"
     cfg <- buildCFG f

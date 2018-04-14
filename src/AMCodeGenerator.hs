@@ -129,18 +129,24 @@ type AMGenerator a m = CompilerMonadT a m
 generateAMCode :: Monad m => Mil -> AMGenerator AM m
 generateAMCode mil@(Mil functions) = do
     code <- mapM fromFunction functions
-    let progHeader =
-            [ AMLine (LOAD_R AMStackPointer) (Just "Push SOMETHING to the first slot on the stack")
-            , AMLine (LOAD_R AMStackPointer) Nothing
-            , AMLine (STORE_R AMFramePointer) (Just "Point the frame pointer to the base of the stack")
-            ]
-    return . AM . concat $ progHeader:code
+    let progHeader = AMLine (LOAD_R AMStackPointer) (Just "Push SOMETHING to the first slot on the stack")
+    return . AM $ progHeader : concat code
 
 -- generate AM code for a function
 fromFunction :: Monad m => Function -> AMGenerator [AMLine] m
-fromFunction fun@(Function label retType paramTypes body) = do
+fromFunction fun@(Function label retType paramTypes localTypes body) = do
     body' <- mapM fromBasicBlock body
-    return (AMLine (LABEL label) Nothing: concat body')
+    let allocLocals =
+            [ AMLine (LOAD_R AMStackPointer) (Just "Setting frame pointer to current frame")
+            , AMLine (STORE_R AMFramePointer) Nothing
+            , AMLine (ALLOC n) (Just ("Allocation " ++ show n ++ " stack frames (local variables)"))
+            ]
+        freeLocals = [AMLine (ALLOC (-n)) (Just ("Freeing " ++ show n ++ " stack frames (local variables)"))]
+        n = length localTypes
+        ret = if label == "main__"
+                then [AMLine (HALT) (Just "Ending program execution")]
+                else [AMLine (JUMP_S) (Just "Retruning to caller")]
+    return (AMLine (LABEL label) Nothing: allocLocals ++ concat body' ++ freeLocals ++ ret)
 
 -- generate AM code for a basic block
 fromBasicBlock :: Monad m => BasicBlock -> AMGenerator [AMLine] m
@@ -159,7 +165,7 @@ fromOpCode opcode = case opcode of
             Char -> return (AMLine READ_C Nothing)
             Bool -> return (AMLine READ_B Nothing)
             t -> codegenError ("Read opcode for type " ++ show t ++ " is not support on the AM platform")
-        frameCalc <- genVarFrameCalculation sym
+        frameCalc <- genFrameCalculation sym
         let storeVar = [AMLine (STORE_O (frameOffset sym)) (Just ("Storing to variable " ++ show (symbolName sym)))]
         return $ op:frameCalc ++ storeVar
     Print t val -> do
@@ -173,7 +179,7 @@ fromOpCode opcode = case opcode of
         return $ valCalc ++ op
     Store sym@(StackLocal{}) val -> do
         valCalc <- fromMilValue val
-        frameCalc <- genVarFrameCalculation sym
+        frameCalc <- genFrameCalculation sym
         let storeVar = [AMLine (STORE_O (frameOffset sym)) (Just ("Storing to variable " ++ show (symbolName sym)))]
         return $ valCalc ++ frameCalc ++ storeVar
     AllocateSlots ts -> return [AMLine (ALLOC n) (Just ("Allocation " ++ show n ++ " stack frames (local variables)"))] where
@@ -204,6 +210,14 @@ fromTerminator terminator = case terminator of
         valCalc <- fromMilValue val
         let brc = [AMLine (APP NOT) Nothing, AMLine (JUMP_C (bbIdAsLabel label)) Nothing]
         return (valCalc ++ brc)
+    Return (Just (_,val)) -> do
+        valCalc <- fromMilValue val
+        let saveRet =
+                [ AMLine (LOAD_R AMFramePointer) (Just "Saving return value")
+                , AMLine (STORE_O (-3)) (Just "")
+                ]
+        return (valCalc ++ saveRet)
+    Exit Nothing -> return [AMLine (HALT) Nothing]
     Fallthrough -> return []
     _ -> codegenError $ ("Unimplemented operation: " ++ show terminator)
 
@@ -266,20 +280,41 @@ fromMilValue val = case val of
     ConstChar c -> return [AMLine (LOAD_C c) Nothing]
     ConstBool b -> return [AMLine (LOAD_B b) Nothing]
     Load sym -> do
-        frameCalc <- genVarFrameCalculation sym
+        frameCalc <- genFrameCalculation sym
         let varLoad = [AMLine (LOAD_O (frameOffset sym)) (Just ("Loading variable " ++ show (symbolName sym)))]
         return $ frameCalc ++ varLoad
+    Call sym@(FunctionLabel{}) args -> do
+        argsCalc <- mapM fromMilValue args
+        linkCalc <- genFrameCalculation sym
+        let allocRetSlot = AMLine (ALLOC 1) (Just "Allocating stack slot for return value")
+            doCall =
+                [ AMLine (LOAD_R AMFramePointer) (Just "Saving frame pointer")
+                , AMLine (LOAD_R AMCodePointer) (Just "Saving return code")
+                , AMLine (JUMP (symbolName sym)) (Just "Calling function")
+                , AMLine (STORE_R AMFramePointer) (Just "Resetting frame pointer")
+                , AMLine (ALLOC (-1)) (Just "Popping static link pointer")
+                ]
+                ++
+                if null args then [] else
+                    [ AMLine (LOAD_R AMStackPointer) (Just "Saving returned value")
+                    , AMLine (STORE_O (- length args)) Nothing
+                    ]
+                ++
+                if length args > 1
+                    then [AMLine (ALLOC (1 - length args)) (Just "Popping arguments from function call")]
+                    else []
+            -- still need to recover return value
+        return (concat argsCalc ++ [allocRetSlot] ++ linkCalc ++ doCall)
     _ -> codegenError $ ("Unimplemented operation: " ++ show val)
 
-genVarFrameCalculation :: Monad m => Symbol -> AMGenerator [AMLine] m
-genVarFrameCalculation (StackLocal name _ offset link) =
-    return $ AMLine (LOAD_R AMFramePointer) (Just ("Calculating stack frame of " ++ show name)) : chaseLinkPointer link
+genFrameCalculation :: Monad m => Symbol -> AMGenerator [AMLine] m
+genFrameCalculation sym =
+    return $ AMLine (LOAD_R AMFramePointer) (Just ("Calculating stack frame of " ++ show (symbolName sym))) : chaseLinkPointer (staticLink sym)
     where
         -- generate code to chase static link pointer n times
         chaseLinkPointer :: Int -> [AMLine]
         chaseLinkPointer 0 = []
         chaseLinkPointer n = AMLine (LOAD_O (-2)) (Just "`-| chasing static link pointer"): chaseLinkPointer (n - 1)
-genVarFrameCalculation sym = codegenError ("Cannot calculate stack position of " ++ show sym)
 
 bbIdAsLabel :: BlockId -> String
 bbIdAsLabel bbid = "label_" ++ show bbid

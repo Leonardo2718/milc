@@ -321,9 +321,9 @@ analyzeAST ast = do
                 isVar sym = case symInfo sym of
                     MVarSym _ _ _ MVariable -> True
                     _ -> False
-            allocFrame <- newBasicBlock [AllocateSlots varTypes] Fallthrough
-            freeFrame <- newBasicBlock [ReleaseSlots varTypes] Fallthrough
-            let mainf = Function "main__" Nothing [] ([allocFrame] ++ prog ++ [freeFrame])
+            -- allocFrame <- newBasicBlock [AllocateSlots varTypes] Fallthrough
+            -- freeFrame <- newBasicBlock [ReleaseSlots varTypes] Fallthrough
+            let mainf = Function "main__" Nothing [] varTypes prog
             pushMilFunction mainf
             logMsgLn "Generated MIL for main function:"
             logFunction mainf
@@ -591,9 +591,9 @@ analyzeAST ast = do
                     isVar sym = case symInfo sym of
                         MVarSym _ _ _ MVariable -> True
                         _ -> False
-                allocFrame <- newBasicBlock [AllocateSlots varTypes] Fallthrough
-                freeFrame <- newBasicBlock [ReleaseSlots varTypes] Fallthrough
-                let fbody = Function label (Just (toMilType rett)) (List.map (toMilType.fst) paramt) ([allocFrame] ++ bbs ++ [freeFrame])
+                -- allocFrame <- newBasicBlock [AllocateSlots varTypes] Fallthrough
+                -- freeFrame <- newBasicBlock [ReleaseSlots varTypes] Fallthrough
+                let fbody = Function label (Just (toMilType rett)) (List.map (toMilType.fst) paramt) varTypes bbs
                 pushMilFunction fbody
                 logMsgLn "Generated MIL for function body:"
                 logFunction fbody
@@ -606,7 +606,7 @@ analyzeAST ast = do
                         logMsgLn "-- found parameter"
                         assertTypeDefined ptype
                         i <- countParameters
-                        defineSymbol pname ppos (MVarSym (removePos ptype) (i+1) pdim MParameter)
+                        defineSymbol pname ppos (MVarSym (removePos ptype) (i - 3 - length params) pdim MParameter)
                         collectParams paramDecls
                     -- helpder for checking the return type of the function and returned values match
                     checkReturnType :: WithPos MStatement -> MSemanticAnalyzer ()
