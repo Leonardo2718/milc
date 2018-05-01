@@ -1,8 +1,9 @@
-# Milc - the Minisculus Intermediate Language Compiler
+# Milc - the M Intermediate Language Compiler
 
-Milc is a small compiler for the M language written in Haskell. It generates
-code targeting the AM stack machine. In addition, milc also packs a few neat
-features.
+(CPSC 411 project, University of Calgary, Winter 2018)
+
+Milc is a small compiler for the [M language](http://pages.cpsc.ucalgary.ca/~robin/class/411/M+/Mspec.pdf)
+written in Haskell. It generates code targeting the [AM stack machine](pages.cpsc.ucalgary.ca/~robin/class/411/AM/AM_spec.ps).
 
 ## Feature overview
 
