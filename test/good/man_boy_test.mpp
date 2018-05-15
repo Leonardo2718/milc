@@ -26,5 +26,6 @@ i := 0;
 
 while i < 8 do {
     print a(i, 1, -1, -1, 1, 0);
+    print "\n";
     i := i + 1;
 };

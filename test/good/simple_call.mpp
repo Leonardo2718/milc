@@ -1,0 +1,12 @@
+fun id(a:int):int {
+    return a;
+};
+fun getx():int {
+    return x;
+};
+var x:int;
+
+read x;
+print id(x);
+print "\n";
+print getx();

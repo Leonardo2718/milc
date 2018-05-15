@@ -1,0 +1,39 @@
+/*
+ * Prints an image of the Mandelbrot set
+ */
+
+var px,py,xmax,ymax,max:int;
+
+px := 0;
+py := 0;
+xmax := 315;
+ymax := 76;
+max := 900;
+
+while (py < ymax) do {
+    while (px < xmax) do {
+        var x0,y0,x,y:real;
+        var iteration:int;
+        x0 := float(px)/float(xmax) * 3.5 - 2.5;
+        y0 := float(py)/float(ymax) * 2.0 - 1.0;
+        x := 0.0;
+        y := 0.0;
+        iteration := 0;
+        while ((x*x + y*y < 2.0*2.0) && (iteration < max)) do {
+            var xtemp:real;
+            xtemp := x*x - y*y + x0;
+            y := 2.0*x*y + y0;
+            x := xtemp;
+            iteration := iteration + 1;
+        };
+        px := px + 1;
+        if (iteration < 175) then {
+            print " ";
+        } else {
+            print "o";
+        };
+    };
+    px := 0;
+    py := py + 1;
+    print "\n";
+};

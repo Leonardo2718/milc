@@ -4,6 +4,7 @@ begin
 
 read b;
 print b;
+print "\n";
 
 if b then print false
      else print true;
