@@ -3,7 +3,7 @@
 (CPSC 411 project, University of Calgary, Winter 2018)
 
 Milc is a small compiler for the [M language](http://pages.cpsc.ucalgary.ca/~robin/class/411/M+/Mspec.pdf)
-written in Haskell. It generates code targeting the [AM stack machine](pages.cpsc.ucalgary.ca/~robin/class/411/AM/AM_spec.ps).
+written in Haskell. It generates code for the Cookie Virtual Machine.
 
 ## Feature overview
 
@@ -18,7 +18,7 @@ Some note-worthy features include:
 - shows source code line(s) where an error is found
 - uses an expressive intermediate language called MIL
 - can do a few simple optimizations
-- generates code to `*.am` files
+- generates code to `*.ckie` files
 - can generate detailed log files of compilations (use `-l` option)
 - supports various command line options (use `--help` for more details)
 
