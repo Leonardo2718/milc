@@ -34,6 +34,7 @@ import MParser
 import MSemantics
 import MIL
 import MilcOptimizer
+import CookieCodeGen
 import AMCodeGenerator
 import MEncoder
 -- import MRDParser
@@ -146,10 +147,11 @@ doCompilation f getSource options = do
     let mil = generatedMil state
     logMil mil
     optMil <- optimize (OptimizerEnvironment {optLevel = milcOptLevel options}) mil
-    amCode <- generateAMCode optMil
+    -- amCode <- generateAMCode optMil
+    targetCode <- generateCKIE optMil
     -- liftIO $ print amCode
     let codegenEnv = CodeGeneratorEnvironment {codegenSource=s, codegenSourceFile=f, codegenOutDir = milcOutDir options}
-    writeEncodeTargetCode codegenEnv amCode
+    writeEncodeTargetCode codegenEnv targetCode
     logMsgLn "\nCOMPILATION SUCCEEDED!\n"
 
 -- run the different stages of the compiler (currently only lexer)

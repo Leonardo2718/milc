@@ -606,7 +606,7 @@ analyzeAST ast = do
                         logMsgLn "-- found parameter"
                         assertTypeDefined ptype
                         i <- countParameters
-                        defineSymbol pname ppos (MVarSym (removePos ptype) (i - 3 - length params) pdim MParameter)
+                        defineSymbol pname ppos (MVarSym (removePos ptype) (i - 2 - length params) pdim MParameter)
                         collectParams paramDecls
                     -- helpder for checking the return type of the function and returned values match
                     checkReturnType :: WithPos MStatement -> MSemanticAnalyzer ()
