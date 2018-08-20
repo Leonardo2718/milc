@@ -135,7 +135,9 @@ instance Show CKIELine where
                 POP -> indent ++ "POP"
                 JUMP l -> indent ++ "JUMP " ++ show l
                 EXIT -> indent ++ "EXIT"
-                Stack i -> indent ++ "S." ++ show i
+                Stack (BRANCHON v l) -> indent ++ "BRANCHON " ++ show v ++ " ! " ++ show l
+                Stack (READ t) -> indent ++ "READ " ++ show t ++ " !"
+                Stack i -> indent ++ show i ++ "!"
             indent = "    "
 
 showCKIELines :: [CKIELine] -> String
