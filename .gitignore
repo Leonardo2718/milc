@@ -1,5 +1,6 @@
 dist/
 make_build/
+.stack-work/
 *.log
 cabal.sandbox.config
 .cabal-sandbox/
