@@ -105,7 +105,7 @@ data VInstruction   = ADD | SUB | DIV | MUL | MOD
                     | CVT Type
                     | LOADFROM | STORETO
                     | DJUMP
-                    | BRANCHON Value Label
+                    | BRANCH Label
                     | PRINT | READ Type
                     deriving (Eq, Show)
 
@@ -135,7 +135,7 @@ instance Show CKIELine where
                 POP -> indent ++ "POP"
                 JUMP l -> indent ++ "JUMP " ++ show l
                 EXIT -> indent ++ "EXIT"
-                Stack (BRANCHON v l) -> indent ++ "BRANCHON " ++ show v ++ " ! " ++ show l
+                Stack (BRANCH l) -> indent ++ "BRANCH.EQ! " ++ show l
                 Stack (READ t) -> indent ++ "READ " ++ show t ++ " !"
                 Stack i -> indent ++ show i ++ "!"
             indent = "    "
@@ -259,10 +259,15 @@ fromTerminator epilogue terminator = do
         Jump target -> return [CKIELine (JUMP (bbIdAsLabel target)) Nothing]
         Branch condition target -> do
             conditionCalc <- fromMilValue condition
-            return $ conditionCalc ++ [CKIELine (Stack (BRANCHON (CookieCodeGen.Bool True) (bbIdAsLabel target))) Nothing]
+            return $ conditionCalc ++
+                [ CKIELine (PUSHC (CookieCodeGen.Bool True)) Nothing
+                , CKIELine (Stack (BRANCH (bbIdAsLabel target))) Nothing]
         BranchZero condition target -> do
             conditionCalc <- fromMilValue condition
-            return $ conditionCalc ++ [CKIELine (Stack (BRANCHON (CookieCodeGen.Bool False) (bbIdAsLabel target))) Nothing]
+            return $ conditionCalc ++
+                [ CKIELine (PUSHC (CookieCodeGen.Bool False)) Nothing
+                , CKIELine (Stack (BRANCH (bbIdAsLabel target))) Nothing
+                ]
         Exit Nothing -> return $ epilogue ++ [CKIELine (EXIT) Nothing]
         Fallthrough -> return []
         Return (Just (_, val)) -> do
